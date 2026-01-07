@@ -49,6 +49,8 @@ parser.add_argument("-batch_size", type= int, default= 128, help= "Training batc
 parser.add_argument("-lr", type=float, default= 1e-4, help='Learning rate')
 parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd, adam"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
+parser.add_argument("-scenario", type= str, default= "class",
+                    choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
 # Unlearn Hyperparameter
 parser.add_argument('-report_training', type= bool, default= True, help= "option to show training performance")
