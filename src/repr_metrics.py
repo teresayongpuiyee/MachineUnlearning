@@ -22,7 +22,7 @@ def get_representations(
     model: torch.nn.Module,
 ):
     loader = DataLoader(
-        loader.dataset, batch_size=1, shuffle=False
+        loader.dataset, batch_size=loader.batch_size, shuffle=False
     )
     reps = []
     all_labels = []
