@@ -30,6 +30,7 @@ parser.add_argument("-batch_size", type= int, default= 128, help= "Training batc
 parser.add_argument("-lr", type=float, default= 1e-4, help='Learning rate')
 parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd, adam"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
+parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
@@ -63,9 +64,9 @@ if __name__ == "__main__":
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
     if args.optimizer == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
+        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-4)
+        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     loss_func = nn.CrossEntropyLoss().to(device)
     max_test_acc = 0.0
