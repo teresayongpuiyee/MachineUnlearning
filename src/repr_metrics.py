@@ -13,6 +13,8 @@ from sklearn.model_selection import KFold
 # t-SNE visualization
 import matplotlib.pyplot as plt
 from sklearn.manifold import TSNE
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 
 def get_representations(
     loader: DataLoader,
@@ -210,20 +212,20 @@ def linear_probing(
 def visualize_tsne(
     loader: DataLoader,
     model: torch.nn.Module,
-    title: str = "t-SNE Visualization",
+    unlearn_method: str,
     perplexity: int = 30,
     n_iter: int = 1000,
-    save_path: str = None
+    save_path: str = "./visualize"
 ):
     """
     Visualize representations using t-SNE.
     Args:
         loader: DataLoader for the data to visualize
         model: Model to extract representations
-        title: Plot title
+        unlearn_method: Unlearning method name for title
         perplexity: t-SNE perplexity
         n_iter: t-SNE iterations
-        save_path: Optional, if provided, saves the plot to this path
+        save_path: Saves the plot to this path
     """
     model.eval()
     
@@ -231,12 +233,16 @@ def visualize_tsne(
     reps = reps.numpy()
     all_labels = all_labels.numpy()
 
+    reps = StandardScaler().fit_transform(reps)
+    if reps.shape[1] > 50:
+        reps = PCA(n_components=50, random_state=42).fit_transform(reps)
+
     tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=n_iter, random_state=42)
     reps_2d = tsne.fit_transform(reps)
 
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(reps_2d[:, 0], reps_2d[:, 1], c=all_labels, cmap='tab10', alpha=0.7)
-    plt.title(title)
+    plt.title("t-SNE Visualization - "+f"{unlearn_method}")
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
     plt.colorbar(scatter, label='Label')
