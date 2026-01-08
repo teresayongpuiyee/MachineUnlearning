@@ -1,5 +1,7 @@
 import os
 import torch
+import torch.nn as nn
+import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 from sklearn.linear_model import LogisticRegression
@@ -120,40 +122,84 @@ def miars(
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return round(asr, 4)
 
-def linear_probe_accuracy(
+def linear_probing(
+    train_loader: DataLoader,
     retain_loader: DataLoader,
     forget_loader: DataLoader,
     model: torch.nn.Module,
-    solver: str = "lbfgs",
-    max_iter: int = 1000,
+    num_classes: int,
+    epochs: int = 10,
+    lr: float = 1e-3,
 ) -> dict:
     """
-    Trains a linear classifier (logistic regression) on the representations from the retain set,
-    then evaluates accuracy on both the forget and retain sets.
+    Trains a linear probe (head) on top of frozen model representations using SGD and cross-entropy,
+    then evaluates accuracy on both the retain and forget sets.
+
+    Reference: https://github.com/KU-VGI/ESC/blob/main/evaluation.py
     Args:
+        train_loader: DataLoader for training the linear head
         retain_loader: DataLoader for the retain (remaining) set
         forget_loader: DataLoader for the forget set
         model: Model to extract representations
-        solver: Solver for LogisticRegression
-        max_iter: Max iterations for LogisticRegression
+        num_classes: Number of output classes
+        epochs: Number of training epochs
+        lr: Learning rate for SGD
     Returns:
         Dictionary with accuracy on retain and forget sets
     """
     model.eval()
-    # Get representations and labels
-    retain_reps, retain_labels = get_representations(retain_loader, model)
-    forget_reps, forget_labels = get_representations(forget_loader, model)
+    device = next(model.parameters()).device
+    # Setup linear head
+    # Infer from feature_extractor output
+    dummy = next(iter(train_loader))[0].to(device)
+    with torch.no_grad():
+        feat = model.feature_extractor(dummy)
+        feat = feat.view(feat.size(0), -1)
+    head = nn.Linear(feat.size(1), num_classes).to(device)
+    nn.init.xavier_normal_(head.weight)
+    nn.init.zeros_(head.bias)
 
-    X_train = retain_reps.numpy()
-    y_train = retain_labels.numpy()
-    X_forget = forget_reps.numpy()
-    y_forget = forget_labels.numpy()
+    # Freeze backbone
+    for param in model.parameters():
+        param.requires_grad = False
+    for param in head.parameters():
+        param.requires_grad = True
 
-    clf = LogisticRegression(class_weight="balanced", solver=solver, max_iter=max_iter)
-    clf.fit(X_train, y_train)
+    optimizer = optim.SGD(head.parameters(), lr=lr)
+    criterion = nn.CrossEntropyLoss()
 
-    retain_acc = clf.score(X_train, y_train) * 100
-    forget_acc = clf.score(X_forget, y_forget) * 100
+    # Train linear head
+    for _ in range(epochs):
+        head.train()
+        for x, y in train_loader:
+            x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+            with torch.no_grad():
+                feat = model.feature_extractor(x)
+                feat = feat.view(feat.size(0), -1)
+            logits = head(feat)
+            loss = criterion(logits, y)
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+    # Evaluation
+    def eval_accuracy(loader):
+        head.eval()
+        correct = 0
+        total = 0
+        with torch.no_grad():
+            for x, y in loader:
+                x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+                feat = model.feature_extractor(x)
+                feat = feat.view(feat.size(0), -1)
+                logits = head(feat)
+                pred = logits.argmax(dim=1)
+                correct += (pred == y).sum().item()
+                total += y.size(0)
+        return 100.0 * correct / total if total > 0 else 0.0
+
+    retain_acc = eval_accuracy(retain_loader)
+    forget_acc = eval_accuracy(forget_loader)
 
     return {
         "retain_accuracy": round(retain_acc, 4),
