@@ -1,6 +1,6 @@
 from src import utils
 import argparse
-from src import dataset, metrics
+from src import dataset, metrics, repr_metrics
 from model import models
 from torch.utils.data import DataLoader
 import torch
@@ -80,6 +80,7 @@ def main() -> None:
         unlearn_class=args.unlearn_class
     )
 
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
@@ -112,6 +113,7 @@ def main() -> None:
     runtime = end_time - start_time
 
     # Evaluation after unlearning
+    # Classification-level evaluation
     retain_acc = metrics.evaluate(val_loader=retain_loader, model=unlearned_model, device=device)['Acc']
     unlearn_acc = metrics.evaluate(val_loader=unlearn_loader, model=unlearned_model, device=device)['Acc']
     mia = metrics.mia(
@@ -119,7 +121,39 @@ def main() -> None:
         forget_loader=unlearn_loader,
         test_loader=test_loader,
         model=unlearned_model)
-    print(f"Unlearned - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
+    print(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
+
+    # Representation-level evaluation
+    rmia = repr_metrics.representation_level_mia(
+        retain_loader=retain_loader,
+        forget_loader=unlearn_loader,
+        test_loader=test_loader,
+        model=unlearned_model
+    )
+
+    miars = repr_metrics.miars(
+        retain_loader=retain_loader,
+        test_loader=test_loader,
+        forget_loader=unlearn_loader,
+        model=unlearned_model
+    )
+
+    linear_probe_acc = repr_metrics.linear_probing(
+        train_loader= train_loader,
+        retain_loader= retain_loader,
+        forget_loader= unlearn_loader,
+        model= unlearned_model,
+        num_classes= num_classes,
+        lr= args.lr,
+    )
+    print(f"Unlearned representation - rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
+
+    repr_metrics.visualize_tsne(
+        loader=train_loader,
+        model=unlearned_model,
+        unlearn_method=args.unlearn_method,
+    )
+    print("t-SNE visualization saved.")
 
     if args.save_model:
         utils.save_model(
