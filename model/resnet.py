@@ -158,14 +158,22 @@ class ResNet(nn.Module):
 
         return nn.Sequential(*layers)
 
+    def feature_extractor(self, x):
+        x = self.conv1(x)
+        x = self.conv2_x(x)
+        x = self.conv3_x(x)
+        x = self.conv4_x(x)
+        x = self.conv5_x(x)
+        x = self.avg_pool(x)
+        return x
+    
+    def classifier_head(self, x):
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
     def forward(self, x):
-        output = self.conv1(x)
-        output = self.conv2_x(output)
-        output = self.conv3_x(output)
-        output = self.conv4_x(output)
-        output = self.conv5_x(output)
-        output = self.avg_pool(output)
-        output = output.view(output.size(0), -1)
-        output = self.fc(output)
+        features = self.feature_extractor(x)
+        output = self.classifier_head(features)
 
         return output
