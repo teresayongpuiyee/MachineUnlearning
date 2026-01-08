@@ -87,7 +87,7 @@ def representation_level_mia(
 
 # MIA in Representation Space based on https://openreview.net/forum?id=KzSGJy1PIf
 def miars(
-    train_loader: DataLoader,
+    retain_loader: DataLoader,
     test_loader: DataLoader,
     forget_loader: DataLoader,
     model: torch.nn.Module,
@@ -97,7 +97,7 @@ def miars(
     Trains a KNN classifier to distinguish between train and test samples based on their representations,
     then applies the trained KNN to classify the forget samples and calculates the attack success rate (ASR).
     Args:
-        train_loader: DataLoader for the train set
+        retain_loader: DataLoader for the train set
         test_loader: DataLoader for the test set
         forget_loader: DataLoader for the forget set
         model: The model to extract representations from
@@ -107,12 +107,12 @@ def miars(
     """
     model.eval()
     # Get representations
-    train_reps, _ = get_representations(train_loader, model)
+    retain_reps, _ = get_representations(retain_loader, model)
     test_reps, _ = get_representations(test_loader, model)
     forget_reps, _ = get_representations(forget_loader, model)
 
-    X = torch.cat([train_reps, test_reps], dim=0).numpy()
-    y = np.concatenate([np.ones(len(train_reps)), np.zeros(len(test_reps))])
+    X = torch.cat([retain_reps, test_reps], dim=0).numpy()
+    y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
 
     knn = KNeighborsClassifier(n_neighbors=n_neighbors)
     knn.fit(X, y)
