@@ -12,6 +12,7 @@ from sklearn.model_selection import KFold
 
 # t-SNE visualization
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 from sklearn.manifold import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
@@ -240,13 +241,28 @@ def visualize_tsne(
     tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=n_iter, random_state=42)
     reps_2d = tsne.fit_transform(reps)
 
+    ## Plotting visualization
+    # Ensure consistent color mapping: map each label to a specific color
+    unique_labels = np.unique(all_labels)
+    # Use tab10 or tab20 depending on number of classes
+    cmap_name = 'tab10' if len(unique_labels) <= 10 else 'tab20'
+    base_cmap = plt.get_cmap(cmap_name)
+    # Build a ListedColormap with colors assigned in order of sorted unique_labels
+    color_list = [base_cmap(i % base_cmap.N) for i in range(len(unique_labels))]
+    label_to_color_idx = {label: idx for idx, label in enumerate(unique_labels)}
+    color_indices = np.array([label_to_color_idx[label] for label in all_labels])
+    custom_cmap = mcolors.ListedColormap(color_list)
+
     plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(reps_2d[:, 0], reps_2d[:, 1], c=all_labels, cmap='tab10', alpha=0.7)
+    scatter = plt.scatter(reps_2d[:, 0], reps_2d[:, 1], c=color_indices, cmap=custom_cmap, alpha=0.7)
     plt.title("t-SNE Visualization - "+f"{unlearn_method}")
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
-    plt.colorbar(scatter, label='Label')
+    # Custom colorbar with correct label ticks
+    cbar = plt.colorbar(scatter, ticks=range(len(unique_labels)), label='Label')
+    cbar.ax.set_yticklabels([str(l) for l in unique_labels])
     plt.tight_layout()
     if save_path:
-        plt.savefig(save_path)
+        os.makedirs(save_path, exist_ok=True)
+        plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
     plt.show()
