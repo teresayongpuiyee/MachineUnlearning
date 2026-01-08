@@ -1,6 +1,6 @@
 import os
 import torch
-import tqdm
+from tqdm import tqdm
 import numpy as np
 from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
