@@ -124,6 +124,13 @@ def main() -> None:
     print(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
 
     # Representation-level evaluation
+    repr_mia = repr_metrics.repr_mia(
+        retain_loader=retain_loader,
+        forget_loader=unlearn_loader,
+        test_loader=test_loader,
+        model=unlearned_model
+    )
+
     rmia = repr_metrics.representation_level_mia(
         retain_loader=retain_loader,
         forget_loader=unlearn_loader,
@@ -146,7 +153,7 @@ def main() -> None:
         num_classes= num_classes,
         lr= args.lr,
     )
-    print(f"Unlearned representation - rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
+    print(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
 
     repr_metrics.visualize_tsne(
         loader=train_loader,

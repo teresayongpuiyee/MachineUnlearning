@@ -36,6 +36,34 @@ def get_representations(
             all_labels.append(target.cpu())
     return torch.cat(reps, dim=0), torch.cat(all_labels, dim=0)
 
+# Representation-level Membership Inference Attack (MIA)
+def repr_mia(
+    retain_loader: DataLoader,
+    forget_loader: DataLoader,
+    test_loader: DataLoader,
+    model: torch.nn.Module,
+) -> float:
+    
+    model.eval()
+
+    # Get representations for retain, forget, and test sets
+    retain_reps, _ = get_representations(retain_loader, model)
+    forget_reps, _ = get_representations(forget_loader, model)
+    test_reps, _ = get_representations(test_loader, model)
+    
+    # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
+    X = torch.cat([retain_reps, test_reps], dim=0).numpy()
+    y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
+
+    clf = LogisticRegression(
+        class_weight="balanced", solver="lbfgs", multi_class="multinomial"
+    )
+    clf.fit(X, y)
+    # Attack on forget set (should be members)
+    forget_pred = clf.predict(forget_reps.numpy())
+    asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
+    return round(asr, 4)
+
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on https://arxiv.org/abs/2511.19339 
 def representation_level_mia(
