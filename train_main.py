@@ -37,6 +37,9 @@ parser.add_argument("-scenario", type= str, default= "class",
 parser.add_argument('-report_training', type= bool, default= False, help= "option to show training performance")
 parser.add_argument('-report_interval', type= int, default= 5, help= "training performance report interval")
 
+parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
+parser.add_argument('-patience', type=int, default=10, help='Early stopping patience')
+
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
@@ -69,8 +72,10 @@ if __name__ == "__main__":
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
     loss_func = nn.CrossEntropyLoss().to(device)
-    max_test_acc = 0.0
-    max_train_acc = 0.0
+    best_test_loss = float('inf')
+    best_test_acc = -float('inf')
+    best_train_acc = -float('inf')
+    patience_counter = 0
 
     for epoch in tqdm(range(1, args.epochs + 1)):
         loss_list = []
@@ -90,14 +95,27 @@ if __name__ == "__main__":
 
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= model, device= device)['Acc']
-        test_acc = metrics.evaluate(val_loader= test_loader, model= model, device= device)['Acc']
+        test_metrics = metrics.evaluate(val_loader= test_loader, model= model, device= device)
+        test_loss = test_metrics['Loss']
+        test_acc = test_metrics['Acc']
         if args.report_training:
             tqdm.write(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
 
-        if test_acc >= max_test_acc:
-            max_test_acc = test_acc
-            max_train_acc = train_acc
+        if test_acc > best_test_acc:
+            best_test_acc = test_acc
+            best_train_acc = train_acc
             best_model = copy.deepcopy(model)
+
+        if args.early_stop:
+            if test_loss < best_test_loss:
+                best_test_loss = test_loss
+                patience_counter = 0
+            else:
+                patience_counter += 1
+
+            if patience_counter >= args.patience:
+                tqdm.write(f"Early stopping at epoch {epoch}")
+                break
 
     utils.save_model(
         model_arc=args.model,
@@ -106,6 +124,6 @@ if __name__ == "__main__":
         model_name="baseline",
         model_root=args.model_root,
         dataset_name=args.dataset,
-        train_acc=max_train_acc,
-        test_acc=max_test_acc
+        train_acc=best_train_acc,
+        test_acc=best_test_acc
     )
