@@ -56,7 +56,7 @@ def repr_mia(
     y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
 
     clf = LogisticRegression(
-        class_weight="balanced", solver="lbfgs", multi_class="multinomial"
+        class_weight="balanced", solver="lbfgs", multi_class="multinomial", max_iter=1000
     )
     clf.fit(X, y)
     # Attack on forget set (should be members)
