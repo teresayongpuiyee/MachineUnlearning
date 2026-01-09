@@ -7,6 +7,8 @@ from model import models
 from torch import nn
 from tqdm import tqdm
 import numpy as np
+import wandb
+import datetime
 
 parser = argparse.ArgumentParser()
 # Device
@@ -43,9 +45,43 @@ parser.add_argument('-patience', type=int, default=10, help='Early stopping pati
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
+parser.add_argument("-project", default="machine_unlearning", type=str, help="wandb project name")
+parser.add_argument("-wandb", dest="wandb", action="store_true", default=False, help="log in wandb")
+
 args = parser.parse_args()
+timestamp = "{0:%Y-%m-%d-%H-%M}".format(datetime.datetime.now())
+
+def flatten_dict(d, prefix=''):
+    """
+    Recursively flatten a dictionary with dot notation keys.
+    """
+    items = []
+    for k, v in d.items():
+        new_key = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            items.extend(flatten_dict(v, new_key).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
 
 if __name__ == "__main__":
+    if args.wandb:
+        # Convert to OmegaConf object
+        config_dict = vars(args)
+        flattened_config = flatten_dict(config_dict)
+
+        wandb.login()
+
+        run = wandb.init(
+            # Set the project where this run will be logged
+            project=args.project,
+            name="_".join([args.model, args.dataset, timestamp]),
+            dir=args.model_root,
+            # Track hyperparameters and run metadata
+            config=flattened_config,
+        )
+
     # Set seed
     utils.set_seed(seed= args.seed)
 
@@ -100,6 +136,18 @@ if __name__ == "__main__":
         test_acc = test_metrics['Acc']
         if args.report_training:
             tqdm.write(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
+        
+        if args.wandb:
+            cur_lr = optimizer.param_groups[0]['lr']
+
+            wandb.log({
+                "val/accuracy": test_acc, 
+                "val/loss": test_loss,
+                "train/accuracy": train_acc,
+                "train/loss": mean_loss,
+                "lr": cur_lr,
+                "epoch": epoch
+            })
 
         if test_acc > best_test_acc:
             best_test_acc = test_acc
