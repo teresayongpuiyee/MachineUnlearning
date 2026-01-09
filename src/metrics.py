@@ -151,6 +151,7 @@ def mia(
     model
 ) -> float:
     copy_model = copy.deepcopy(model) # avoid overwriting
+    copy_model.eval()
     X_f, Y_f, X_r, Y_r, forget_enp = get_membership_attack_data(
         retain_loader, forget_loader, test_loader, copy_model
     )
