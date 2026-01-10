@@ -85,18 +85,14 @@ def create_directory_if_not_exists(
 
 
 def save_model(
-    model_arc: str,
     model: torch.nn.Module,
-    scenario: str,
     model_name: str,
     model_root: str,
-    dataset_name: str,
     train_acc: float,
     test_acc: float,
 ) -> None:
-    model_folder = f"{model_root}/{model_arc}/{scenario}/{dataset_name}/"
-    create_directory_if_not_exists(file_path=model_folder)
-    model_path = f"{model_folder}{model_name}_{train_acc}_{test_acc}.pt"
+    create_directory_if_not_exists(file_path=model_root)
+    model_path = f"{model_root}/{model_name}_{train_acc}_{test_acc}.pt"
     #model_path = f"{model_folder}{model_name}.pt"
     torch.save(model.state_dict(), model_path)
 

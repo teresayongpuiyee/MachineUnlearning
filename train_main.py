@@ -9,6 +9,7 @@ from tqdm import tqdm
 import numpy as np
 import wandb
 import datetime
+import os
 
 parser = argparse.ArgumentParser()
 # Device
@@ -22,7 +23,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "Cifar100",
                              "TinyImagenet"])
 # Model
-parser.add_argument("-model_root", type= str, default= "./checkpoint", help= "Dataset root directory")
+parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-save_model", type= bool, default= True, help= "Save trained model option")
 
@@ -46,6 +47,7 @@ parser.add_argument('-patience', type=int, default=10, help='Early stopping pati
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
 parser.add_argument("-project", default="machine_unlearning", type=str, help="wandb project name")
+parser.add_argument("-exp_name", type=str, help="experiment name")
 parser.add_argument("-wandb", dest="wandb", action="store_true", default=False, help="log in wandb")
 
 args = parser.parse_args()
@@ -66,6 +68,12 @@ def flatten_dict(d, prefix=''):
 
 
 if __name__ == "__main__":
+
+    if os.path.exists(os.path.dirname("./"+args.exp_name)):
+        args.exp_name = args.exp_name + "_" + timestamp
+
+    utils.create_directory_if_not_exists(file_path="./"+args.exp_name)
+
     if args.wandb:
         # Convert to OmegaConf object
         config_dict = vars(args)
@@ -76,11 +84,12 @@ if __name__ == "__main__":
         run = wandb.init(
             # Set the project where this run will be logged
             project=args.project,
-            name="_".join([args.model, args.dataset, timestamp]),
-            dir=args.model_root,
+            name=args.exp_name,
+            dir="./"+args.exp_name,
             # Track hyperparameters and run metadata
             config=flattened_config,
         )
+    args.model_root = "/".join([".", args.exp_name, args.model_root])
 
     # Set seed
     utils.set_seed(seed= args.seed)
@@ -166,12 +175,9 @@ if __name__ == "__main__":
                 break
 
     utils.save_model(
-        model_arc=args.model,
         model=best_model,
-        scenario=args.scenario,
         model_name="baseline",
         model_root=args.model_root,
-        dataset_name=args.dataset,
         train_acc=best_train_acc,
         test_acc=best_test_acc
     )

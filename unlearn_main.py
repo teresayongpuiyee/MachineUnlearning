@@ -19,7 +19,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "Cifar100",
                              "TinyImagenet"])
 # Model
-parser.add_argument("-model_root", type= str, default= "./checkpoint", help= "Dataset root directory")
+parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Dataset root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-save_model", type= bool, default= False, help= "Save trained model option")
 
@@ -63,6 +63,9 @@ args = parser.parse_args()
 
 
 def main() -> None:
+    exp_name = args.model_path.split("/")[-3]
+    args.model_root = "/".join([".", exp_name, args.model_root])
+
     # Set seed
     utils.set_seed(seed=args.seed)
 
@@ -159,17 +162,15 @@ def main() -> None:
         loader=train_loader,
         model=unlearned_model,
         unlearn_method=args.unlearn_method,
+        exp_name=exp_name
     )
     print("t-SNE visualization saved.")
 
     if args.save_model:
         utils.save_model(
-            model_arc=args.model,
             model=unlearned_model,
-            scenario=args.scenario,
             model_name=args.unlearn_method,
             model_root=args.model_root,
-            dataset_name=args.dataset,
             train_acc=retain_acc,
             test_acc=unlearn_acc
         )

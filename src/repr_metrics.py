@@ -242,9 +242,9 @@ def visualize_tsne(
     loader: DataLoader,
     model: torch.nn.Module,
     unlearn_method: str,
+    exp_name: str,
     perplexity: int = 30,
     n_iter: int = 1000,
-    save_path: str = "./visualize"
 ):
     """
     Visualize representations using t-SNE.
@@ -290,7 +290,8 @@ def visualize_tsne(
     cbar = plt.colorbar(scatter, ticks=range(len(unique_labels)), label='Label')
     cbar.ax.set_yticklabels([str(l) for l in unique_labels])
     plt.tight_layout()
-    if save_path:
-        os.makedirs(save_path, exist_ok=True)
-        plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
+
+    save_path = "/".join([".", exp_name, "visualize"])
+    os.makedirs(save_path, exist_ok=True)
+    plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
     plt.show()
