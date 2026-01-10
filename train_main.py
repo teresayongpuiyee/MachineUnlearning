@@ -10,6 +10,7 @@ import numpy as np
 import wandb
 import datetime
 import os
+import yaml
 
 parser = argparse.ArgumentParser()
 # Device
@@ -36,9 +37,6 @@ parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (d
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
-
-parser.add_argument('-report_training', type= bool, default= False, help= "option to show training performance")
-parser.add_argument('-report_interval', type= int, default= 5, help= "training performance report interval")
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
 parser.add_argument('-patience', type=int, default=10, help='Early stopping patience')
@@ -76,9 +74,14 @@ if __name__ == "__main__":
 
     utils.create_directory_if_not_exists("./"+args.exp_name, logger)
 
+    OUTPUT_CONFIG_FILE = f"./{args.exp_name}/train_config.yaml"
+    OUTPUT_METRICS_FILE = f"./{args.exp_name}/train_metrics.yaml"
+    config_dict = vars(args)
+    with open(OUTPUT_CONFIG_FILE, 'w') as f:
+        yaml.dump(config_dict, f, default_flow_style=False)
+
     if args.wandb:
         # Convert to OmegaConf object
-        config_dict = vars(args)
         flattened_config = flatten_dict(config_dict)
 
         wandb.login()
@@ -145,25 +148,26 @@ if __name__ == "__main__":
         test_metrics = metrics.evaluate(val_loader= test_loader, model= model, device= device)
         test_loss = test_metrics['Loss']
         test_acc = test_metrics['Acc']
-        if args.report_training:
-            logger.info(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
+
+        metrics_dict = {
+            "val/accuracy": test_acc, 
+            "val/loss": test_loss,
+            "train/accuracy": train_acc,
+            "train/loss": mean_loss,
+            "epoch": epoch
+        }
+
+        logger.info(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
         
         if args.wandb:
             cur_lr = optimizer.param_groups[0]['lr']
-
-            wandb.log({
-                "val/accuracy": test_acc, 
-                "val/loss": test_loss,
-                "train/accuracy": train_acc,
-                "train/loss": mean_loss,
-                "lr": cur_lr,
-                "epoch": epoch
-            })
+            wandb.log(metrics_dict.update([("lr", cur_lr)]))
 
         if test_acc > best_test_acc:
             best_test_acc = test_acc
             best_train_acc = train_acc
             best_model = copy.deepcopy(model)
+            best_metrics = metrics_dict
 
         if args.early_stop:
             if test_loss < best_test_loss:
@@ -184,3 +188,6 @@ if __name__ == "__main__":
         test_acc=best_test_acc,
         logger=logger
     )
+
+    with open(OUTPUT_METRICS_FILE, 'w') as f:
+        yaml.dump(best_metrics, f, default_flow_style=False)

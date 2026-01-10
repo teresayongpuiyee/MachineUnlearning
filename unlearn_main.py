@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 import torch
 from unlearn_strategies import strategies
 import time
+import yaml
 
 parser = argparse.ArgumentParser()
 # Device
@@ -44,17 +45,12 @@ parser.add_argument("-model_path", type= str,
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 
 # Training hyperparameter
-parser.add_argument("-epochs", type= int, default= 1, help= "Training epochs")
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
-parser.add_argument("-lr", type=float, default= 1e-4, help='Learning rate')
-parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd, adam"])
-parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
 # Unlearn Hyperparameter
-parser.add_argument('-report_training', type= bool, default= True, help= "option to show training performance")
-parser.add_argument('-report_interval', type= int, default= 5, help= "training performance report interval")
+parser.add_argument("-linear_probe_lr", type=float, default= 1e-4, help='Learning rate')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -66,6 +62,12 @@ def main() -> None:
     exp_name = args.model_path.split("/")[-3]
     args.model_root = "/".join([".", exp_name, args.model_root])
     logger = utils.configure_logger(f"./{exp_name}/unlearn_{args.unlearn_method}.log")
+
+    OUTPUT_CONFIG_FILE = f"./{exp_name}/unlearn_{args.unlearn_method}_config.yaml"
+    OUTPUT_METRICS_FILE = f"./{exp_name}/unlearn_{args.unlearn_method}_metrics.yaml"
+    config_dict = vars(args)
+    with open(OUTPUT_CONFIG_FILE, 'w') as f:
+        yaml.dump(config_dict, f, default_flow_style=False)
 
     # Set seed
     utils.set_seed(seed=args.seed)
@@ -116,6 +118,7 @@ def main() -> None:
     )
     end_time = time.time()
     runtime = end_time - start_time
+    logger.info(f"Unlearned Runtime: {runtime}s")
 
     # Evaluation after unlearning
     # Classification-level evaluation
@@ -126,7 +129,7 @@ def main() -> None:
         forget_loader=unlearn_loader,
         test_loader=test_loader,
         model=unlearned_model)
-    logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
+    logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia}")
 
     # Representation-level evaluation
     repr_mia = repr_metrics.repr_mia(
@@ -156,7 +159,7 @@ def main() -> None:
         forget_loader= unlearn_loader,
         model= unlearned_model,
         num_classes= num_classes,
-        lr= args.lr,
+        lr= args.linear_probe_lr,
     )
     logger.info(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
 
@@ -168,6 +171,17 @@ def main() -> None:
     )
     logger.info("t-SNE visualization saved.")
 
+    metrics_dict = {
+        "classification/retain_acc": retain_acc,
+        "classification/unlearn_acc": unlearn_acc,
+        "classification/mia": mia,
+        "representation/repr_mia": repr_mia,
+        "representation/rmia": rmia,
+        "representation/miars": miars,
+        "representation/linear_probe_acc": linear_probe_acc,
+        "runtime_sec": runtime
+    }
+
     if args.save_model:
         utils.save_model(
             model=unlearned_model,
@@ -177,6 +191,9 @@ def main() -> None:
             test_acc=unlearn_acc,
             logger=logger
         )
+
+    with open(OUTPUT_METRICS_FILE, 'w') as f:
+        yaml.dump(metrics_dict, f, default_flow_style=False)
 
 if __name__ == "__main__":
     main()
