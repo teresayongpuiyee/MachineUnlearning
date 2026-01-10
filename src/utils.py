@@ -6,6 +6,7 @@ import argparse
 from typing import Tuple, List
 import pandas as pd
 import os
+import logging
 
 
 def set_seed(
@@ -71,7 +72,8 @@ def save_tensor(
 
 
 def create_directory_if_not_exists(
-    file_path: str
+    file_path: str,
+    logger,
 ) -> None:
     # Check the directory exist,
     # If not then create the directory
@@ -81,7 +83,7 @@ def create_directory_if_not_exists(
     if not os.path.exists(directory):
         # If not, create the directory and its parent directories if necessary
         os.makedirs(directory)
-        print(f"Created new directory: {file_path}")
+        logger.info(f"Created new directory: {file_path}")
 
 
 def save_model(
@@ -90,8 +92,9 @@ def save_model(
     model_root: str,
     train_acc: float,
     test_acc: float,
+    logger,
 ) -> None:
-    create_directory_if_not_exists(file_path=model_root)
+    create_directory_if_not_exists(model_root, logger)
     model_path = f"{model_root}/{model_name}_{train_acc}_{test_acc}.pt"
     #model_path = f"{model_folder}{model_name}.pt"
     torch.save(model.state_dict(), model_path)
@@ -106,3 +109,24 @@ def get_csv_attr(
     for attr in df[column_name]:
         attr_list.append(attr)
     return attr_list
+
+def configure_logger(log_file):
+    # Define the file where logs will be written
+    LOG_FILENAME = log_file
+
+    # Configure the basic settings
+    logging.basicConfig(
+        filename=LOG_FILENAME,  # Specify the output file
+        level=logging.INFO,     # Set the minimum severity level to log (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
+        format='%(asctime)s - %(levelname)s - %(module)s - %(message)s' # Define the log message format
+        # Example format options:
+        # %(asctime)s: Timestamp
+        # %(levelname)s: Severity level (e.g., INFO, ERROR)
+        # %(name)s: Logger name (default is 'root' if not specified)
+        # %(module)s: Module (filename) where the log call was made
+        # %(message)s: The actual log message
+    )
+
+    logger = logging.getLogger(__name__)
+
+    return logger

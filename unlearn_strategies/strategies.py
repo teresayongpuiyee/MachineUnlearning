@@ -18,6 +18,7 @@ from src import metrics
 
 
 def baseline(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -33,6 +34,7 @@ def baseline(
 
 
 def retrain(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -47,6 +49,7 @@ def retrain(
 
     # Retrain model from scratch without unlearn dataset
     retrain_model = utils.training_optimization(
+        logger,
         model= model,
         train_loader= retain_loader,
         test_loader= test_loader,
@@ -59,6 +62,7 @@ def retrain(
 
 
 def fine_tune(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -73,6 +77,7 @@ def fine_tune(
 
     # Fine tune model with retain dataset
     ft_model = utils.training_optimization(
+        logger,
         model= model,
         train_loader= retain_loader,
         test_loader= test_loader,
@@ -86,6 +91,7 @@ def fine_tune(
 
 # Unrolling SGD: https://github.com/cleverhans-lab/unrolling-sgd
 def gradient_ascent(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -118,13 +124,14 @@ def gradient_ascent(
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader=retain_loader, model=unlearned_model, device=device)['Acc']
         test_acc = metrics.evaluate(val_loader=test_loader, model=unlearned_model, device=device)['Acc']
-        #tqdm.write(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
+        #logger.info(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
     return unlearned_model
 
 
 # Bad Teacher: https://github.com/vikram2000b/bad-teaching-unlearning
 def bad_teacher(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -144,6 +151,7 @@ def bad_teacher(
         retain_loader.dataset, int(0.3 * len(retain_loader.dataset)))
 
     unlearn.blindspot_unlearner(
+        logger=logger,
         model=student_model,
         unlearning_teacher=unlearning_teacher,
         full_trained_teacher=model,
@@ -162,6 +170,7 @@ def bad_teacher(
 
 # SCRUB: https://github.com/meghdadk/SCRUB/tree/main
 def scrub(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -240,6 +249,7 @@ def scrub(
         maximize_loss = 0
         if epoch <= msteps:
             maximize_loss = train_distill(
+                logger=logger,
                 epoch= epoch,
                 train_loader= unlearn_loader,
                 module_list= module_list,
@@ -251,6 +261,7 @@ def scrub(
                 beta= beta,
                 split= "maximize")
         train_acc, train_loss = train_distill(
+            logger=logger,
             epoch= epoch,
             train_loader= retain_loader,
             module_list= module_list,
@@ -268,6 +279,7 @@ def scrub(
 
 # Amnesiac Unlearning: https://github.com/lmgraves/AmnesiacML
 def amnesiac(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -296,6 +308,7 @@ def amnesiac(
     )
 
     unlearned_model = utils.training_optimization(
+        logger,
         model= model, 
         train_loader= unlearning_train_set_dl,
         test_loader= test_loader,
@@ -308,6 +321,7 @@ def amnesiac(
 
 # Boundary Unlearning: https://github.com/TY-LEE-KR/Boundary-Unlearning-Code
 def boundary(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -391,6 +405,7 @@ def boundary(
 
 # Neural Tangent Kernel: https://github.com/AdityaGolatkar/SelectiveForgetting
 def ntk(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -443,13 +458,13 @@ def ntk(
     #############################################################################################
     model_init = deepcopy(model)
     G_r, f0_minus_y_r = delta_w_utils(deepcopy(model), retain_loader, "complete")
-    print("GOT GR")
+    logger.info("GOT GR")
     # np.save('NTK_data/G_r.npy',G_r)
     # np.save('NTK_data/f0_minus_y_r.npy',f0_minus_y_r)
     # del G_r, f0_minus_y_r
 
     G_f, f0_minus_y_f = delta_w_utils(deepcopy(model), unlearn_loader, "retain")
-    print("GOT GF")
+    logger.info("GOT GF")
     # np.save('NTK_data/G_f.npy',G_f)
     # np.save('NTK_data/f0_minus_y_f.npy',f0_minus_y_f)
     # del G_f, f0_minus_y_f
@@ -457,7 +472,7 @@ def ntk(
     # G_r = np.load('NTK_data/G_r.npy')
     # G_f = np.load('NTK_data/G_f.npy')
     G = np.concatenate([G_r, G_f], axis=1)
-    print("GOT G")
+    logger.info("GOT G")
     # np.save('NTK_data/G.npy',G)
     # del G, G_f, G_r
 
@@ -522,16 +537,16 @@ def ntk(
     #### Scrubbing Direction
     # w_complete = np.load('NTK_data/w_complete.npy')
     # w_retain = np.load('NTK_data/w_retain.npy')
-    print("got prelims, calculating delta_w")
+    logger.info("got prelims, calculating delta_w")
     delta_w = (w_retain - w_complete).squeeze()
-    print("got delta_w")
+    logger.info("got delta_w")
     # delta_w_copy = deepcopy(delta_w)
     # delta_w_actual = vectorize_params(model0)-vectorize_params(model)
 
-    # print(f'Actual Norm-: {np.linalg.norm(delta_w_actual)}')
-    # print(f'Predtn Norm-: {np.linalg.norm(delta_w)}')
+    # logger.info(f'Actual Norm-: {np.linalg.norm(delta_w_actual)}')
+    # logger.info(f'Predtn Norm-: {np.linalg.norm(delta_w)}')
     # scale_ratio = np.linalg.norm(delta_w_actual)/np.linalg.norm(delta_w)
-    # print('Actual Scale: {}'.format(scale_ratio))
+    # logger.info('Actual Scale: {}'.format(scale_ratio))
     # log_dict['actual_scale_ratio']=scale_ratio
     def vectorize_params(model):
         param = []
@@ -542,33 +557,33 @@ def ntk(
     m_pred_error = (
         vectorize_params(model) - vectorize_params(model_init) - w_retain.squeeze()
     )
-    print(f"Delta w -------: {np.linalg.norm(delta_w)}")
+    logger.info(f"Delta w -------: {np.linalg.norm(delta_w)}")
 
     inner = np.inner(
         delta_w / np.linalg.norm(delta_w), m_pred_error / np.linalg.norm(m_pred_error)
     )
-    print(f"Inner Product--: {inner}")
+    logger.info(f"Inner Product--: {inner}")
 
     if inner < 0:
         angle = np.arccos(inner) - np.pi / 2
-        print(f"Angle----------:  {angle}")
+        logger.info(f"Angle----------:  {angle}")
 
         predicted_norm = np.linalg.norm(delta_w) + 2 * np.sin(angle) * np.linalg.norm(
             m_pred_error
         )
-        print(f"Pred Act Norm--:  {predicted_norm}")
+        logger.info(f"Pred Act Norm--:  {predicted_norm}")
     else:
         angle = np.arccos(inner)
-        print(f"Angle----------:  {angle}")
+        logger.info(f"Angle----------:  {angle}")
 
         predicted_norm = np.linalg.norm(delta_w) + 2 * np.cos(angle) * np.linalg.norm(
             m_pred_error
         )
-        print(f"Pred Act Norm--:  {predicted_norm}")
+        logger.info(f"Pred Act Norm--:  {predicted_norm}")
 
     predicted_scale = predicted_norm / np.linalg.norm(delta_w)
     predicted_scale
-    print(f"Predicted Scale:  {predicted_scale}")
+    logger.info(f"Predicted Scale:  {predicted_scale}")
     # log_dict['predicted_scale_ratio']=predicted_scale
 
     # def NIP(v1,v2):
@@ -588,6 +603,7 @@ def ntk(
 
 # Fisher Forgertting: https://github.com/AdityaGolatkar/SelectiveForgetting
 def fisher(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -670,6 +686,7 @@ def fisher(
 
 # Selective Impair and Repair: https://github.com/vikram2000b/Fast-Machine-Unlearning
 def unsir(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
@@ -698,7 +715,7 @@ def unsir(
     img_shape = next(iter(retain_loader.dataset))[0].shape[-1]
     noise = unlearn.UNSIR_noise(noise_batch_size, num_channels, img_shape, img_shape).to(device)
     noise = unlearn.UNSIR_noise_train(
-        noise, model, forget_class_label, 25, noise_batch_size, device=device
+        logger, noise, model, forget_class_label, 25, noise_batch_size, device=device
     )
     noisy_loader = unlearn.UNSIR_create_noisy_loader(
         noise,
@@ -709,6 +726,7 @@ def unsir(
     )
     # impair step
     model = utils.training_optimization(
+        logger,
         model= model, 
         epochs= 1,
         train_loader= noisy_loader, 
@@ -731,6 +749,7 @@ def unsir(
         other_samples, batch_size=128, shuffle=True
     )
     _ = utils.training_optimization(
+        logger,
         model= model, 
         epochs= 1,
         train_loader= heal_loader, 
@@ -745,6 +764,7 @@ def unsir(
 
 # Selective Synaptic Dampening: https://github.com/if-loops/selective-synaptic-dampening
 def ssd(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,

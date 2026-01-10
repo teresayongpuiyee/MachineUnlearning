@@ -65,13 +65,14 @@ args = parser.parse_args()
 def main() -> None:
     exp_name = args.model_path.split("/")[-3]
     args.model_root = "/".join([".", exp_name, args.model_root])
+    logger = utils.configure_logger(f"./{exp_name}/unlearn_{args.unlearn_method}.log")
 
     # Set seed
     utils.set_seed(seed=args.seed)
 
     # Device
     device, device_name = utils.device_configuration(args=args)
-    print(f"Unlearning scenario: {args.scenario} Dataset: {args.dataset} Unlearn method: {args.unlearn_method} Device: {device}")
+    logger.info(f"Unlearning scenario: {args.scenario} Dataset: {args.dataset} Unlearn method: {args.unlearn_method} Device: {device}")
 
     # Dataset
     train_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
@@ -101,6 +102,7 @@ def main() -> None:
     start_time = time.time()
     # Unlearn
     unlearned_model = getattr(strategies, args.unlearn_method)(
+        logger=logger,
         args=args,
         model=model,
         unlearning_teacher= unlearning_teacher,
@@ -124,7 +126,7 @@ def main() -> None:
         forget_loader=unlearn_loader,
         test_loader=test_loader,
         model=unlearned_model)
-    print(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
+    logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia} Runtime: {runtime}s")
 
     # Representation-level evaluation
     repr_mia = repr_metrics.repr_mia(
@@ -156,7 +158,7 @@ def main() -> None:
         num_classes= num_classes,
         lr= args.lr,
     )
-    print(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
+    logger.info(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
 
     repr_metrics.visualize_tsne(
         loader=train_loader,
@@ -164,7 +166,7 @@ def main() -> None:
         unlearn_method=args.unlearn_method,
         exp_name=exp_name
     )
-    print("t-SNE visualization saved.")
+    logger.info("t-SNE visualization saved.")
 
     if args.save_model:
         utils.save_model(
@@ -172,7 +174,8 @@ def main() -> None:
             model_name=args.unlearn_method,
             model_root=args.model_root,
             train_acc=retain_acc,
-            test_acc=unlearn_acc
+            test_acc=unlearn_acc,
+            logger=logger
         )
 
 if __name__ == "__main__":

@@ -71,6 +71,7 @@ def unlearning_step(
 
 
 def blindspot_unlearner(
+    logger,
     model,
     unlearning_teacher,
     full_trained_teacher,
@@ -108,7 +109,7 @@ def blindspot_unlearner(
             device=device,
             KL_temperature=KL_temperature,
         )
-        print("Epoch {} Unlearning Loss {}".format(epoch + 1, loss))
+        logger.info("Epoch {} Unlearning Loss {}".format(epoch + 1, loss))
 
 
 class UNSIR_noise(torch.nn.Module):
@@ -121,7 +122,7 @@ class UNSIR_noise(torch.nn.Module):
 
 
 def UNSIR_noise_train(
-    noise, model, forget_class_label, num_epochs, noise_batch_size, device="cuda"
+    logger, noise, model, forget_class_label, num_epochs, noise_batch_size, device="cuda"
 ):
     opt = torch.optim.Adam(noise.parameters(), lr=0.1)
 
@@ -138,7 +139,7 @@ def UNSIR_noise_train(
         opt.step()
         total_loss.append(loss.cpu().detach().numpy())
         if epoch % 5 == 0:
-            print("Loss: {}".format(np.mean(total_loss)))
+            logger.info("Loss: {}".format(np.mean(total_loss)))
 
     return noise
 
@@ -604,6 +605,7 @@ def accuracy(output, target, topk=(1,)):
 
 
 def train_distill(
+    logger,
     epoch,
     train_loader,
     module_list,
@@ -682,7 +684,7 @@ def train_distill(
 
     if split == "minimize":
         if not quiet:
-            print(' * Acc@1 {top1.avg:.3f} '
+            logger.info(' * Acc@1 {top1.avg:.3f} '
                   .format(top1=top1))
 
         return top1.avg, losses.avg

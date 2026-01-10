@@ -72,7 +72,9 @@ if __name__ == "__main__":
     if os.path.exists(os.path.dirname("./"+args.exp_name)):
         args.exp_name = args.exp_name + "_" + timestamp
 
-    utils.create_directory_if_not_exists(file_path="./"+args.exp_name)
+    logger = utils.configure_logger(f"./{args.exp_name}/train.log")
+
+    utils.create_directory_if_not_exists("./"+args.exp_name, logger)
 
     if args.wandb:
         # Convert to OmegaConf object
@@ -144,7 +146,7 @@ if __name__ == "__main__":
         test_loss = test_metrics['Loss']
         test_acc = test_metrics['Acc']
         if args.report_training:
-            tqdm.write(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
+            logger.info(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
         
         if args.wandb:
             cur_lr = optimizer.param_groups[0]['lr']
@@ -171,7 +173,7 @@ if __name__ == "__main__":
                 patience_counter += 1
 
             if patience_counter >= args.patience:
-                tqdm.write(f"Early stopping at epoch {epoch}")
+                logger.info(f"Early stopping at epoch {epoch}")
                 break
 
     utils.save_model(
@@ -179,5 +181,6 @@ if __name__ == "__main__":
         model_name="baseline",
         model_root=args.model_root,
         train_acc=best_train_acc,
-        test_acc=best_test_acc
+        test_acc=best_test_acc,
+        logger=logger
     )

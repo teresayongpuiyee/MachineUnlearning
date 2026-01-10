@@ -14,6 +14,7 @@ import os
 
 
 def training_optimization(
+    logger,
     model: torch.nn.Module,
     train_loader: DataLoader,
     test_loader: DataLoader,
@@ -52,7 +53,7 @@ def training_optimization(
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
         test_acc = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)['Acc']
-        tqdm.write( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
+        logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
     return trained_model
 
