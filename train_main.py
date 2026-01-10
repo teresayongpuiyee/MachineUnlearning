@@ -70,9 +70,9 @@ if __name__ == "__main__":
     if os.path.exists(os.path.dirname("./"+args.exp_name)):
         args.exp_name = args.exp_name + "_" + timestamp
 
-    logger = utils.configure_logger(f"./{args.exp_name}/train.log")
+    utils.create_directory_if_not_exists("./"+args.exp_name)
 
-    utils.create_directory_if_not_exists("./"+args.exp_name, logger)
+    logger = utils.configure_logger(f"./{args.exp_name}/train.log")
 
     OUTPUT_CONFIG_FILE = f"./{args.exp_name}/train_config.yaml"
     OUTPUT_METRICS_FILE = f"./{args.exp_name}/train_metrics.yaml"
@@ -185,8 +185,7 @@ if __name__ == "__main__":
         model_name="baseline",
         model_root=args.model_root,
         train_acc=best_train_acc,
-        test_acc=best_test_acc,
-        logger=logger
+        test_acc=best_test_acc
     )
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:

@@ -188,8 +188,7 @@ def main() -> None:
             model_name=args.unlearn_method,
             model_root=args.model_root,
             train_acc=retain_acc,
-            test_acc=unlearn_acc,
-            logger=logger
+            test_acc=unlearn_acc
         )
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:
