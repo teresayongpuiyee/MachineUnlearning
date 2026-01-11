@@ -67,10 +67,10 @@ def flatten_dict(d, prefix=''):
 
 if __name__ == "__main__":
 
-    if os.path.exists(os.path.dirname("./"+args.exp_name)):
+    if os.path.exists(f"./{args.exp_name}"):
         args.exp_name = args.exp_name + "_" + timestamp
 
-    utils.create_directory_if_not_exists("./"+args.exp_name)
+    utils.create_directory_if_not_exists(f"./{args.exp_name}/")
 
     logger = utils.configure_logger(f"./{args.exp_name}/train.log")
 
@@ -153,7 +153,7 @@ if __name__ == "__main__":
             "val/accuracy": test_acc, 
             "val/loss": test_loss,
             "train/accuracy": train_acc,
-            "train/loss": mean_loss,
+            "train/loss": float(mean_loss),
             "epoch": epoch
         }
 
@@ -161,7 +161,10 @@ if __name__ == "__main__":
         
         if args.wandb:
             cur_lr = optimizer.param_groups[0]['lr']
-            wandb.log(metrics_dict.update([("lr", cur_lr)]))
+            metrics_dict.update({
+                "lr": cur_lr,
+            })
+            wandb.log(metrics_dict)
 
         if test_acc > best_test_acc:
             best_test_acc = test_acc
