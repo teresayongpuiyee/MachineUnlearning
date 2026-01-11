@@ -104,7 +104,7 @@ def collect_prob(
 ):
 
     data_loader = DataLoader(
-        data_loader.dataset, batch_size=1, shuffle=False
+        data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False
     )
     prob = []
     with torch.no_grad():
