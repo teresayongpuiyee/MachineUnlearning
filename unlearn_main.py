@@ -22,7 +22,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Dataset root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
-parser.add_argument("-save_model", type= bool, default= False, help= "Save trained model option")
+parser.add_argument("-save_model", dest="save_model", action="store_true", default= False, help= "Save trained model option")
 
 # Unlearn configuration
 parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
@@ -177,10 +177,10 @@ def main() -> None:
     metrics_dict = {
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
-        "classification/mia": mia,
-        "representation/repr_mia": repr_mia,
-        "representation/rmia": rmia,
-        "representation/miars": miars,
+        "classification/mia": float(mia),
+        "representation/repr_mia": float(repr_mia),
+        "representation/rmia": float(rmia),
+        "representation/miars": float(miars),
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
