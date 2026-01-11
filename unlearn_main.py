@@ -55,6 +55,8 @@ parser.add_argument("-linear_probe_lr", type=float, default= 1e-4, help='Learnin
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
+parser.add_argument("-tsne", dest="tsne", action="store_true", default=False, help="Enable t-SNE visualization")
+
 args = parser.parse_args()
 
 
@@ -162,14 +164,15 @@ def main() -> None:
         lr= args.linear_probe_lr,
     )
     logger.info(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
-
-    repr_metrics.visualize_tsne(
-        loader=train_loader,
-        model=unlearned_model,
-        unlearn_method=args.unlearn_method,
-        exp_name=exp_name
-    )
-    logger.info("t-SNE visualization saved.")
+    
+    if args.tsne:
+        repr_metrics.visualize_tsne(
+            loader=train_loader,
+            model=unlearned_model,
+            unlearn_method=args.unlearn_method,
+            exp_name=exp_name
+        )
+        logger.info("t-SNE visualization saved.")
 
     metrics_dict = {
         "classification/retain_acc": retain_acc,
