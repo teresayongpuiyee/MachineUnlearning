@@ -116,7 +116,7 @@ if __name__ == "__main__":
 
     if len(args.pretrained_weight):
         state_dict = torch.load(args.pretrained_weight, map_location=device)
-        model.load_state_dict(state_dict, strict=True)
+        model.load_state_dict(state_dict, strict=False)
         logger.info(f"Loaded pretrained model from {args.pretrained_weight}")
 
     if args.optimizer not in ["sgd", "adam"]:
