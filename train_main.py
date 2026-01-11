@@ -26,6 +26,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
+parser.add_argument("-pretrained_weight", type= str, default= "", help= "Pretrained model path")
 
 # Training hyperparameter
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
@@ -113,7 +114,10 @@ if __name__ == "__main__":
     model = getattr(models, args.model)(
         num_classes= num_classes, input_channels= num_channels).to(device)
 
-    # TODO: add option for pretrained weight
+    if len(args.pretrained_weight):
+        state_dict = torch.load(args.pretrained_weight, map_location=device)
+        model.load_state_dict(state_dict, strict=True)
+        logger.info(f"Loaded pretrained model from {args.pretrained_weight}")
 
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
