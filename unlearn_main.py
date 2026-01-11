@@ -104,6 +104,7 @@ def main() -> None:
         model.load_state_dict(torch.load(args.model_path))
 
     start_time = time.time()
+    logger.info("Starting unlearning process...")
     # Unlearn
     unlearned_model = getattr(strategies, args.unlearn_method)(
         logger=logger,
@@ -119,6 +120,7 @@ def main() -> None:
         device=device
     )
     end_time = time.time()
+    logger.info("Unlearning process completed.")
     runtime = end_time - start_time
     logger.info(f"Unlearned Runtime: {runtime}s")
 

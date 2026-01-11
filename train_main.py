@@ -26,13 +26,12 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
-parser.add_argument("-save_model", type= bool, default= True, help= "Save trained model option")
 
 # Training hyperparameter
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
 parser.add_argument("-lr", type=float, default= 1e-4, help='Learning rate')
-parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd, adam"])
+parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "adam"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-scenario", type= str, default= "class",
@@ -114,20 +113,24 @@ if __name__ == "__main__":
     model = getattr(models, args.model)(
         num_classes= num_classes, input_channels= num_channels).to(device)
 
+    # TODO: add option for pretrained weight
+
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
     if args.optimizer == "sgd":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    # TODO: add option for lr scheduler
 
     loss_func = nn.CrossEntropyLoss().to(device)
     best_test_loss = float('inf')
     best_test_acc = -float('inf')
     best_train_acc = -float('inf')
     patience_counter = 0
+    start_epoch = 1
 
-    for epoch in tqdm(range(1, args.epochs + 1)):
+    for epoch in tqdm(range(start_epoch, args.epochs + 1)):
         loss_list = []
         model.train()
         for images, labels in train_loader:
