@@ -146,7 +146,13 @@ if __name__ == "__main__":
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
 
-    lr_scheduler = scheduler.get_lr_scheduler(args.lr_scheduler, optimizer, args.milestones, args.epochs, args.t0)
+    lr_scheduler = scheduler.get_lr_scheduler(
+        args.lr_scheduler, 
+        optimizer, 
+        milestones=args.milestones, 
+        epochs=args.epochs, 
+        t0=args.t0
+    )
 
     loss_func = nn.CrossEntropyLoss().to(device)
     best_test_loss = float('inf')
