@@ -60,17 +60,27 @@ parser.add_argument("-tsne", dest="tsne", action="store_true", default=False, he
 args = parser.parse_args()
 
 
-def main() -> None:
+def main(args) -> None:
     exp_name = args.model_path.split("/")[-3]
-    args.model_root = "/".join([".", exp_name, args.model_root])
+    config_dict = vars(args).copy()
+
+    # Read train config for retrain method
+    if args.unlearn_method == "retrain":
+        with open(f"./{exp_name}/train_config.yaml", 'r') as f:
+            train_config = yaml.safe_load(f)
+
+        config_dict.update(train_config)
+        # Convert the final dictionary back to an argparse-like object (Namespace)
+        args = argparse.Namespace(**config_dict)
+
     logger = utils.configure_logger(f"./{exp_name}/unlearn_{args.unlearn_method}.log")
 
     OUTPUT_CONFIG_FILE = f"./{exp_name}/unlearn_{args.unlearn_method}_config.yaml"
     OUTPUT_METRICS_FILE = f"./{exp_name}/unlearn_{args.unlearn_method}_metrics.yaml"
-    config_dict = vars(args)
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
+    args.model_root = "/".join([".", exp_name, args.model_root])
     # Set seed
     utils.set_seed(seed=args.seed)
 
@@ -200,4 +210,4 @@ def main() -> None:
         yaml.dump(metrics_dict, f, default_flow_style=False)
 
 if __name__ == "__main__":
-    main()
+    main(args)

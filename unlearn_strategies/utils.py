@@ -21,17 +21,34 @@ def training_optimization(
     epochs: int,
     device: torch.device,
     desc: str,
-    opt: str= "adam"
+    opt: str= "adam",
+    args: argparse.Namespace = None
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
 
+    if desc == "Retraining model":
+        epochs = args.epochs
+        opt = args.optimizer
+        early_stop = args.early_stop
+        lr = args.lr
+        momentum = args.momentum
+        weight_decay = args.weight_decay
+        patience = args.patience
+        best_test_loss = float('inf')
+        best_test_acc = -float('inf')
+        patience_counter = 0
+    else:
+        lr = 1e-4
+        momentum = 0.5
+        weight_decay = 1e-4
+
     if opt not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
     if opt == "sgd":
-        optimizer = torch.optim.SGD(trained_model.parameters(), lr=1e-4, momentum= 0.5)
+        optimizer = torch.optim.SGD(trained_model.parameters(), lr=lr, momentum= momentum)
     else:
-        optimizer = torch.optim.Adam(trained_model.parameters(), lr=1e-4, weight_decay=1e-4)
+        optimizer = torch.optim.Adam(trained_model.parameters(), lr=lr, weight_decay=weight_decay)
 
     loss_func = nn.CrossEntropyLoss().to(device)
 
@@ -52,10 +69,30 @@ def training_optimization(
 
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
-        test_acc = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)['Acc']
+        test_metrics = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)
+        test_loss = test_metrics['Loss']
+        test_acc = test_metrics['Acc']
         logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
-    return trained_model
+        if desc == "Retraining model":
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+                best_trained_model = trained_model
+
+            if early_stop:
+                if test_loss < best_test_loss:
+                    best_test_loss = test_loss
+                    patience_counter = 0
+                else:
+                    patience_counter += 1
+
+                if patience_counter >= patience:
+                    logger.info(f"Early stopping at epoch {epoch}")
+                    break
+        else:
+            best_trained_model = trained_model
+
+    return best_trained_model
 
 
 def device_configuration(

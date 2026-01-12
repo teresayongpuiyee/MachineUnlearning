@@ -55,7 +55,8 @@ def retrain(
         test_loader= test_loader,
         epochs= 30,
         device= device,
-        desc= "Retraining model"
+        desc= "Retraining model",
+        args=args,
     )
 
     return retrain_model
