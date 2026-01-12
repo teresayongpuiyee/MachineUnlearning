@@ -1,5 +1,5 @@
 import copy
-from src import dataset, metrics, utils
+from src import dataset, metrics, utils, scheduler
 import argparse
 import torch
 from torch.utils.data import DataLoader
@@ -37,6 +37,17 @@ parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (d
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
+
+parser.add_argument("-lr_scheduler", type= str, default= "constant", 
+                    choices= [
+                        "constant", 
+                        "cosineannealingwarmrestarts",
+                        "multisteplr",
+                        "reducelronplateau",
+                        "cosineannealing"
+                        ])
+parser.add_argument("-milestones", type= int, nargs='+', default= [10, 20], help= "Steps for lr decay in multisteplr")
+parser.add_argument("-t0", type= int, default= 5, help= "Number of epochs for the first restart in CosineAnnealingWarmRestarts")
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
 parser.add_argument('-patience', type=int, default=10, help='Early stopping patience')
@@ -134,7 +145,8 @@ if __name__ == "__main__":
         optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
     else:
         optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    # TODO: add option for lr scheduler
+
+    lr_scheduler = scheduler.get_lr_scheduler(args.lr_scheduler, optimizer, args.milestones, args.epochs, args.t0)
 
     loss_func = nn.CrossEntropyLoss().to(device)
     best_test_loss = float('inf')
@@ -164,6 +176,12 @@ if __name__ == "__main__":
         test_metrics = metrics.evaluate(val_loader= test_loader, model= model, device= device)
         test_loss = test_metrics['Loss']
         test_acc = test_metrics['Acc']
+
+        if lr_scheduler is not None:
+            if args.lr_scheduler == "reducelronplateau":
+                lr_scheduler.step(test_loss)
+            else:
+                lr_scheduler.step()
 
         metrics_dict = {
             "val/accuracy": test_acc, 
