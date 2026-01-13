@@ -145,6 +145,13 @@ def main(args) -> None:
     runtime = end_time - start_time
     logger.info(f"Unlearned Runtime: {runtime}s")
 
+    if args.save_model:
+        utils.save_model(
+            model=unlearned_model,
+            model_name=args.unlearn_method,
+            model_root=args.model_root,
+        )
+
     # Evaluation after unlearning
     # Classification-level evaluation
     retain_acc = metrics.evaluate(val_loader=retain_loader, model=unlearned_model, device=device)['Acc']
@@ -246,13 +253,6 @@ def main(args) -> None:
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
-
-    if args.save_model:
-        utils.save_model(
-            model=unlearned_model,
-            model_name=args.unlearn_method,
-            model_root=args.model_root,
-        )
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:
         yaml.safe_dump(metrics_dict, f, default_flow_style=False, sort_keys=False)

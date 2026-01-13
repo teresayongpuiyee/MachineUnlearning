@@ -81,7 +81,7 @@ def training_optimization(
         test_metrics = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)
         test_loss = test_metrics['Loss']
         test_acc = test_metrics['Acc']
-        logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
+        logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Test Loss: {test_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
         if desc == "Retraining model":
             if lr_scheduler is not None:
