@@ -52,10 +52,12 @@ def repr_mia(
         class_weight="balanced", solver="lbfgs", multi_class="multinomial", max_iter=1000
     )
     clf.fit(X, y)
+
+    train_acc = clf.score(X, y) * 100
     # Attack on forget set (should be members)
     forget_pred = clf.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return round(asr, 4)
+    return round(train_acc, 4), round(asr, 4)
 
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on https://arxiv.org/abs/2511.19339 
@@ -90,17 +92,22 @@ def representation_level_mia(
 
     # Five-fold cross-validation attack
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
+    train_acc_list = []
     asr_list = []
     for train_idx, test_idx in kf.split(X):
         X_train, y_train = X[train_idx], y[train_idx]
         X_test, y_test = X[test_idx], y[test_idx]
         clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
         clf.fit(X_train, y_train)
+
+        train_acc = clf.score(X_train, y_train) * 100
         # Attack on forget set (should be members)
         forget_pred = clf.predict(forget_reps.numpy())
         asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
+        
+        train_acc_list.append(train_acc)
         asr_list.append(asr)
-    return round(np.mean(asr_list), 4)
+    return round(np.mean(train_acc_list), 4), round(np.mean(asr_list), 4)
 
 
 # MIA in Representation Space based on https://openreview.net/forum?id=KzSGJy1PIf
@@ -127,9 +134,12 @@ def miars(
 
     knn = KNeighborsClassifier(n_neighbors=n_neighbors)
     knn.fit(X, y)
+
+    train_acc = knn.score(X, y) * 100
+
     forget_pred = knn.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return round(asr, 4)
+    return round(train_acc, 4), round(asr, 4)
 
 # MIA using MLP
 def mia_mlp(
@@ -180,31 +190,37 @@ def mia_mlp(
         epoch_loss = running_loss / len(train_loader.dataset)
         logger.info(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
 
-    model.eval() # Set model to evaluation mode
-    correct_predictions = 0
-    total_samples = 0
+    def evaluate(val_loader: DataLoader, model: torch.nn.Module, device: torch.device) -> float:
+        model.eval() # Set model to evaluation mode
+        correct_predictions = 0
+        total_samples = 0
+        
+        all_predictions = []
+        all_labels = []
+
+        with torch.no_grad():
+            for features, labels in val_loader:
+                features, labels = features.to(device), labels.to(device)
+                
+                logits = model(features)
+                
+                # Apply Sigmoid and threshold to get binary prediction (0 or 1)
+                probabilities = torch.sigmoid(logits)
+                predictions = (probabilities >= 0.5).float()
+                
+                correct_predictions += (predictions == labels).sum().item()
+                total_samples += labels.size(0)
+                
+                all_predictions.extend(predictions.cpu().numpy())
+                all_labels.extend(labels.cpu().numpy())
+
+        accuracy = (correct_predictions / total_samples) * 100.0
+        return round(accuracy, 4)
     
-    all_predictions = []
-    all_labels = []
+    train_acc = evaluate(train_loader, model, device)
+    forget_acc = evaluate(val_loader, model, device)
 
-    with torch.no_grad():
-        for features, labels in val_loader:
-            features, labels = features.to(device), labels.to(device)
-            
-            logits = model(features)
-            
-            # Apply Sigmoid and threshold to get binary prediction (0 or 1)
-            probabilities = torch.sigmoid(logits)
-            predictions = (probabilities >= 0.5).float()
-            
-            correct_predictions += (predictions == labels).sum().item()
-            total_samples += labels.size(0)
-            
-            all_predictions.extend(predictions.cpu().numpy())
-            all_labels.extend(labels.cpu().numpy())
-
-    accuracy = correct_predictions / total_samples
-    return round(accuracy * 100, 4)
+    return train_acc, forget_acc
 
 def linear_probing(
     train_loader: DataLoader,

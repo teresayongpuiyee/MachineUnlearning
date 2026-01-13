@@ -159,26 +159,26 @@ def main(args) -> None:
     test_reps, _ = repr_metrics.get_representations(test_loader, unlearned_model)
 
     logger.info(f"Unlearned representation")
-    repr_mia = repr_metrics.repr_mia(
+    train_repr_mia, val_repr_mia = repr_metrics.repr_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
         test_reps=test_reps
     )
-    logger.info(f"repr MIA: {repr_mia}")
+    logger.info(f"repr MIA - train: {train_repr_mia} val: {val_repr_mia}")
 
-    rmia = repr_metrics.representation_level_mia(
+    train_rmia, val_rmia = repr_metrics.representation_level_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
         test_reps=test_reps,
     )
-    logger.info(f"rMIA: {rmia}")
+    logger.info(f"rMIA - train: {train_rmia} val: {val_rmia}")
 
-    miars = repr_metrics.miars(
+    train_miars, val_miars = repr_metrics.miars(
         retain_reps=retain_reps,
         test_reps=test_reps,
         forget_reps=forget_reps,
     )
-    logger.info(f"MIARS: {miars}")
+    logger.info(f"MIARS - train: {train_miars} val: {val_miars}")
 
     linear_probe_acc = repr_metrics.linear_probing(
         train_loader= train_loader,
@@ -190,14 +190,14 @@ def main(args) -> None:
     )
     logger.info(f"Linear probing acc: {linear_probe_acc}")
 
-    mia_mlp_asr = repr_metrics.mia_mlp(
+    train_mia_mlp_asr, val_mia_mlp_asr = repr_metrics.mia_mlp(
         retain_reps=retain_reps,
         test_reps=test_reps,
         forget_reps=forget_reps,
         device=device,
         logger=logger,
     )
-    logger.info(f"MIA MLP ASR: {mia_mlp_asr}")
+    logger.info(f"MIA MLP ASR - train: {train_mia_mlp_asr} val: {val_mia_mlp_asr}")
     
     if args.tsne:
         repr_metrics.visualize_tsne(
@@ -212,9 +212,14 @@ def main(args) -> None:
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
         "classification/mia": float(mia),
-        "representation/repr_mia": float(repr_mia),
-        "representation/rmia": float(rmia),
-        "representation/miars": float(miars),
+        "representation/train/repr_mia": float(train_repr_mia),
+        "representation/train/rmia": float(train_rmia),
+        "representation/train/miars": float(train_miars),
+        "representation/train/mia_mlp_asr": float(train_mia_mlp_asr),
+        "representation/val/repr_mia": float(val_repr_mia),
+        "representation/val/rmia": float(val_rmia),
+        "representation/val/miars": float(val_miars),
+        "representation/val/mia_mlp_asr": float(val_mia_mlp_asr),
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
