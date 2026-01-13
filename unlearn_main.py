@@ -178,7 +178,7 @@ def main(args) -> None:
         _, sampled_indices = train_test_split(
             indices,
             test_size=target_size,
-            stratify=retain_labels.numpy(), # Still need numpy here for sklearn to read labels
+            stratify=retain_labels.numpy(),
             random_state=42
         )
 

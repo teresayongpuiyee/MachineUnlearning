@@ -15,7 +15,7 @@ from sklearn.metrics import f1_score
 # t-SNE visualization
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
-from sklearn.manifold import TSNE
+from openTSNE import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
@@ -57,6 +57,11 @@ def repr_mia(
         random_state=42
     )
 
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    X_test = scaler.transform(X_test)
+    forget_X = scaler.transform(forget_reps.numpy())
+
     clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
     clf.fit(X, y)
 
@@ -69,14 +74,14 @@ def repr_mia(
     test_f1 = f1_score(y_test, test_preds, average="macro") * 100
 
     metrics_dict = {
-        "train_acc": round(train_acc, 4),
-        "train_f1": round(train_f1, 4),
-        "test_acc": round(test_acc, 4),
-        "test_f1": round(test_f1, 4),
+        "train_acc": round(float(train_acc), 4),
+        "train_f1": round(float(train_f1), 4),
+        "test_acc": round(float(test_acc), 4),
+        "test_f1": round(float(test_f1), 4),
     }
 
     # Attack on forget set (should be members)
-    forget_pred = clf.predict(forget_reps.numpy())
+    forget_pred = clf.predict(forget_X)
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return metrics_dict, round(asr, 4)
 
@@ -108,9 +113,15 @@ def representation_level_mia(
     test_acc_list = []
     test_f1_list = []
     asr_list = []
-    for train_idx, test_idx in kf.split(X):
+    for train_idx, test_idx in kf.split(X, y):
         X_train, y_train = X[train_idx], y[train_idx]
         X_test, y_test = X[test_idx], y[test_idx]
+
+        scaler = StandardScaler()
+        X_train = scaler.fit_transform(X_train)
+        X_test = scaler.transform(X_test)
+        forget_X = scaler.transform(forget_reps.numpy())
+
         clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
         clf.fit(X_train, y_train)
 
@@ -123,7 +134,7 @@ def representation_level_mia(
         test_f1 = f1_score(y_test, test_preds, average="macro") * 100
         
         # Attack on forget set (should be members)
-        forget_pred = clf.predict(forget_reps.numpy())
+        forget_pred = clf.predict(forget_X)
         asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
         
         train_acc_list.append(train_acc)
@@ -133,10 +144,10 @@ def representation_level_mia(
         asr_list.append(asr)
 
     metrics_dict = {
-        "train_acc": round(np.mean(train_acc_list), 4),
-        "train_f1": round(np.mean(train_f1_list), 4),
-        "test_acc": round(np.mean(test_acc_list), 4),
-        "test_f1": round(np.mean(test_f1_list), 4),
+        "train_acc": round(float(np.mean(train_acc_list)), 4),
+        "train_f1": round(float(np.mean(train_f1_list)), 4),
+        "test_acc": round(float(np.mean(test_acc_list)), 4),
+        "test_f1": round(float(np.mean(test_f1_list)), 4),
     }
 
     return metrics_dict, round(np.mean(asr_list), 4)
@@ -172,6 +183,11 @@ def miars(
         random_state=42
     )
 
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    X_test = scaler.transform(X_test)
+    forget_X = scaler.transform(forget_reps.numpy())
+
     knn = KNeighborsClassifier(n_neighbors=n_neighbors)
     knn.fit(X, y)
 
@@ -184,13 +200,13 @@ def miars(
     test_f1 = f1_score(y_test, test_preds, average="macro") * 100
 
     metrics_dict = {
-        "train_acc": round(train_acc, 4),
-        "train_f1": round(train_f1, 4),
-        "test_acc": round(test_acc, 4),
-        "test_f1": round(test_f1, 4),
+        "train_acc": round(float(train_acc), 4),
+        "train_f1": round(float(train_f1), 4),
+        "test_acc": round(float(test_acc), 4),
+        "test_f1": round(float(test_f1), 4),
     }
 
-    forget_pred = knn.predict(forget_reps.numpy())
+    forget_pred = knn.predict(forget_X)
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return metrics_dict, round(asr, 4)
 
@@ -275,8 +291,8 @@ def mia_mlp(
     forget_acc, _ = evaluate(val_loader, model, device)
 
     metrics_dict = {
-        "train_acc": train_acc,
-        "train_f1": train_f1,
+        "train_acc": float(train_acc),
+        "train_f1": float(train_f1),
     }
 
     return metrics_dict, forget_acc
@@ -373,49 +389,70 @@ def visualize_tsne(
     exp_name: str,
     perplexity: int = 30,
     n_iter: int = 1000,
+    max_samples: int = 10000,
 ):
     """
     Visualize representations using t-SNE.
     Args:
-        loader: DataLoader for the data to visualize
-        model: Model to extract representations
-        unlearn_method: Unlearning method name for title
+        reps: Torch tensor of shape (N, D) with representations
+        all_labels: Torch tensor of shape (N,) with labels
+        unlearn_method: Name for title / filename
+        exp_name: Folder name to save visualization
         perplexity: t-SNE perplexity
-        n_iter: t-SNE iterations
-        save_path: Saves the plot to this path
+        n_iter: Number of t-SNE iterations
+        max_samples: Max number of points to visualize (subsampling)
     """
     reps = reps.numpy()
     all_labels = all_labels.numpy()
 
+    # Only subsample if dataset is large
+    if len(reps) > max_samples:
+        reps, _, all_labels, _ = train_test_split(
+            reps,
+            all_labels,
+            train_size=max_samples,
+            stratify=all_labels,  # preserves class ratios
+            random_state=42
+        )
+
+    # Standardize
     reps = StandardScaler().fit_transform(reps)
+
+    # PCA for speed (retain 50 components or less if input dim < 50)
     if reps.shape[1] > 50:
         reps = PCA(n_components=50, random_state=42).fit_transform(reps)
 
-    tsne = TSNE(n_components=2, perplexity=perplexity, n_iter=n_iter, random_state=42)
+    # Fast t-SNE using openTSNE
+    tsne = TSNE(
+        n_components=2,
+        perplexity=perplexity,
+        n_iter=n_iter,
+        metric="euclidean",
+        random_state=42,
+        n_jobs=-1,  # use all CPU cores
+    )
     reps_2d = tsne.fit_transform(reps)
 
-    ## Plotting visualization
     # Ensure consistent color mapping: map each label to a specific color
     unique_labels = np.unique(all_labels)
-    # Use tab10 or tab20 depending on number of classes
     cmap_name = 'tab10' if len(unique_labels) <= 10 else 'tab20'
     base_cmap = plt.get_cmap(cmap_name)
-    # Build a ListedColormap with colors assigned in order of sorted unique_labels
     color_list = [base_cmap(i % base_cmap.N) for i in range(len(unique_labels))]
     label_to_color_idx = {label: idx for idx, label in enumerate(unique_labels)}
     color_indices = np.array([label_to_color_idx[label] for label in all_labels])
     custom_cmap = mcolors.ListedColormap(color_list)
 
+    # Plot
     plt.figure(figsize=(8, 6))
     scatter = plt.scatter(reps_2d[:, 0], reps_2d[:, 1], c=color_indices, cmap=custom_cmap, alpha=0.7)
-    plt.title("t-SNE Visualization - "+f"{unlearn_method}")
+    plt.title(f"t-SNE Visualization - {unlearn_method}")
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
-    # Custom colorbar with correct label ticks
     cbar = plt.colorbar(scatter, ticks=range(len(unique_labels)), label='Label')
     cbar.ax.set_yticklabels([str(l) for l in unique_labels])
     plt.tight_layout()
 
+    # Save figure
     save_path = "/".join([".", exp_name, "visualize"])
     os.makedirs(save_path, exist_ok=True)
     plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
