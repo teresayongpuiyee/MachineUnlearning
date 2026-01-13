@@ -7,7 +7,7 @@ import copy
 from torch import nn
 from tqdm import tqdm
 import numpy as np
-from src import metrics
+from src import metrics, scheduler
 import argparse
 from typing import Tuple
 import os
@@ -30,13 +30,10 @@ def training_optimization(
     if desc == "Retraining model":
         epochs = args.epochs
         opt = args.optimizer
-        early_stop = args.early_stop
         lr = args.lr
         momentum = args.momentum
         weight_decay = args.weight_decay
-        patience = args.patience
         best_test_loss = float('inf')
-        best_test_acc = -float('inf')
         patience_counter = 0
     else:
         lr = 1e-4
@@ -49,6 +46,15 @@ def training_optimization(
         optimizer = torch.optim.SGD(trained_model.parameters(), lr=lr, momentum= momentum)
     else:
         optimizer = torch.optim.Adam(trained_model.parameters(), lr=lr, weight_decay=weight_decay)
+
+    if desc == "Retraining model":
+        lr_scheduler = scheduler.get_lr_scheduler(
+            args.lr_scheduler, 
+            optimizer, 
+            milestones=args.milestones, 
+            epochs=args.epochs, 
+            t0=args.t0
+        )
 
     loss_func = nn.CrossEntropyLoss().to(device)
 
@@ -75,24 +81,24 @@ def training_optimization(
         logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
         if desc == "Retraining model":
-            if test_acc > best_test_acc:
-                best_test_acc = test_acc
-                best_trained_model = trained_model
+            if lr_scheduler is not None:
+                if args.lr_scheduler == "reducelronplateau":
+                    lr_scheduler.step(test_loss)
+                else:
+                    lr_scheduler.step()
 
-            if early_stop:
+            if args.early_stop:
                 if test_loss < best_test_loss:
                     best_test_loss = test_loss
                     patience_counter = 0
                 else:
                     patience_counter += 1
 
-                if patience_counter >= patience:
+                if patience_counter >= args.patience:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
-        else:
-            best_trained_model = trained_model
 
-    return best_trained_model
+    return trained_model
 
 
 def device_configuration(
