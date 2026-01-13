@@ -48,13 +48,16 @@ def training_optimization(
         optimizer = torch.optim.Adam(trained_model.parameters(), lr=lr, weight_decay=weight_decay)
 
     if desc == "Retraining model":
-        lr_scheduler = scheduler.get_lr_scheduler(
-            args.lr_scheduler, 
-            optimizer, 
-            milestones=args.milestones, 
-            epochs=args.epochs, 
-            t0=args.t0
-        )
+        if hasattr(args, "lr_scheduler"):
+            lr_scheduler = scheduler.get_lr_scheduler(
+                args.lr_scheduler, 
+                optimizer, 
+                milestones=args.milestones, 
+                epochs=args.epochs, 
+                t0=args.t0
+            )
+        else:
+            lr_scheduler = None
 
     loss_func = nn.CrossEntropyLoss().to(device)
 
