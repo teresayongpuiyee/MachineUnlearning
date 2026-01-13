@@ -98,10 +98,17 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
+    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
+        data_list=test_dataset,
+        unlearn_class=args.unlearn_class
+    )
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
+    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=True)
+    test_unlearn_loader = DataLoader(test_unlearn_dataset, batch_size=args.batch_size, shuffle=True)
 
     # Model preparation
     model = getattr(models, args.model)(
@@ -146,25 +153,27 @@ def main(args) -> None:
     logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia}")
 
     # Representation-level evaluation
+    train_reps, all_labels = repr_metrics.get_representations(train_loader, unlearned_model)
+    retain_reps, _ = repr_metrics.get_representations(retain_loader, unlearned_model)
+    forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
+    test_reps, _ = repr_metrics.get_representations(test_loader, unlearned_model)
+
     repr_mia = repr_metrics.repr_mia(
-        retain_loader=retain_loader,
-        forget_loader=unlearn_loader,
-        test_loader=test_loader,
-        model=unlearned_model
+        retain_reps=retain_reps,
+        forget_reps=forget_reps,
+        test_reps=test_reps
     )
 
     rmia = repr_metrics.representation_level_mia(
-        retain_loader=retain_loader,
-        forget_loader=unlearn_loader,
-        test_loader=test_loader,
-        model=unlearned_model
+        retain_reps=retain_reps,
+        forget_reps=forget_reps,
+        test_reps=test_reps,
     )
 
     miars = repr_metrics.miars(
-        retain_loader=retain_loader,
-        test_loader=test_loader,
-        forget_loader=unlearn_loader,
-        model=unlearned_model
+        retain_reps=retain_reps,
+        test_reps=test_reps,
+        forget_reps=forget_reps,
     )
 
     linear_probe_acc = repr_metrics.linear_probing(
@@ -179,8 +188,8 @@ def main(args) -> None:
     
     if args.tsne:
         repr_metrics.visualize_tsne(
-            loader=train_loader,
-            model=unlearned_model,
+            reps=train_reps,
+            all_labels=all_labels,
             unlearn_method=args.unlearn_method,
             exp_name=exp_name
         )

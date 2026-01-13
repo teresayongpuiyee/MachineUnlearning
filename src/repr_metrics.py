@@ -21,6 +21,7 @@ def get_representations(
     loader: DataLoader,
     model: torch.nn.Module,
 ):
+    model.eval()
     loader = DataLoader(
         loader.dataset, batch_size=loader.batch_size, shuffle=False
     )
@@ -38,19 +39,10 @@ def get_representations(
 
 # Representation-level Membership Inference Attack (MIA)
 def repr_mia(
-    retain_loader: DataLoader,
-    forget_loader: DataLoader,
-    test_loader: DataLoader,
-    model: torch.nn.Module,
+    retain_reps: torch.tensor,
+    forget_reps: torch.tensor,
+    test_reps: torch.tensor,
 ) -> float:
-    
-    model.eval()
-
-    # Get representations for retain, forget, and test sets
-    retain_reps, _ = get_representations(retain_loader, model)
-    forget_reps, _ = get_representations(forget_loader, model)
-    test_reps, _ = get_representations(test_loader, model)
-    
     # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
     X = torch.cat([retain_reps, test_reps], dim=0).numpy()
     y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
@@ -67,10 +59,9 @@ def repr_mia(
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on https://arxiv.org/abs/2511.19339 
 def representation_level_mia(
-    retain_loader: DataLoader,
-    forget_loader: DataLoader,
-    test_loader: DataLoader,
-    model: torch.nn.Module,
+    retain_reps: torch.tensor,
+    forget_reps: torch.tensor,
+    test_reps: torch.tensor,
 ) -> float:
     """
     Perform a five-fold membership inference attack on the forget set using representations from a specified layer.
@@ -91,14 +82,7 @@ def representation_level_mia(
         ...     model=unlearned_model,
         ... )
         >>> print(f"Representation-level MIA ASR: {asr}%")
-    """
-    model.eval()
-
-    # Get representations for retain, forget, and test sets
-    retain_reps, _ = get_representations(retain_loader, model)
-    forget_reps, _ = get_representations(forget_loader, model)
-    test_reps, _ = get_representations(test_loader, model)
-    
+    """    
     # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
     X = torch.cat([retain_reps, test_reps], dim=0).numpy()
     y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
@@ -120,10 +104,9 @@ def representation_level_mia(
 
 # MIA in Representation Space based on https://openreview.net/forum?id=KzSGJy1PIf
 def miars(
-    retain_loader: DataLoader,
-    test_loader: DataLoader,
-    forget_loader: DataLoader,
-    model: torch.nn.Module,
+    retain_reps: torch.tensor,
+    test_reps: torch.tensor,
+    forget_reps: torch.tensor,
     n_neighbors: int = 5
 ) -> float:
     """
@@ -138,12 +121,6 @@ def miars(
     Returns:
         Attack success rate (float, percent of forget samples classified as train/member)
     """
-    model.eval()
-    # Get representations
-    retain_reps, _ = get_representations(retain_loader, model)
-    test_reps, _ = get_representations(test_loader, model)
-    forget_reps, _ = get_representations(forget_loader, model)
-
     X = torch.cat([retain_reps, test_reps], dim=0).numpy()
     y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
 
@@ -239,8 +216,8 @@ def linear_probing(
 
 # t-SNE visualization function
 def visualize_tsne(
-    loader: DataLoader,
-    model: torch.nn.Module,
+    reps: torch.tensor,
+    all_labels: torch.tensor,
     unlearn_method: str,
     exp_name: str,
     perplexity: int = 30,
@@ -256,9 +233,6 @@ def visualize_tsne(
         n_iter: t-SNE iterations
         save_path: Saves the plot to this path
     """
-    model.eval()
-    
-    reps, all_labels = get_representations(loader, model)
     reps = reps.numpy()
     all_labels = all_labels.numpy()
 
