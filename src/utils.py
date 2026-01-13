@@ -89,11 +89,9 @@ def save_model(
     model: torch.nn.Module,
     model_name: str,
     model_root: str,
-    train_acc: float,
-    test_acc: float,
 ) -> None:
     create_directory_if_not_exists(f"{model_root}/")
-    model_path = f"{model_root}/{model_name}_{train_acc}_{test_acc}.pt"
+    model_path = f"{model_root}/{model_name}.pt"
     #model_path = f"{model_folder}{model_name}.pt"
     torch.save(model.state_dict(), model_path)
 

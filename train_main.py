@@ -227,8 +227,6 @@ if __name__ == "__main__":
         model=best_model,
         model_name="baseline",
         model_root=args.model_root,
-        train_acc=best_train_acc,
-        test_acc=best_test_acc
     )
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:
