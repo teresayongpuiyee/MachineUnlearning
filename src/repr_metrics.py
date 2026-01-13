@@ -10,6 +10,7 @@ from torch.utils.data import DataLoader, TensorDataset
 from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import KFold
+from sklearn.metrics import f1_score
 
 # t-SNE visualization
 import matplotlib.pyplot as plt
@@ -54,10 +55,12 @@ def repr_mia(
     clf.fit(X, y)
 
     train_acc = clf.score(X, y) * 100
+    train_preds = clf.predict(X)
+    train_f1 = f1_score(y, train_preds, average="macro") * 100
     # Attack on forget set (should be members)
     forget_pred = clf.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return round(train_acc, 4), round(asr, 4)
+    return round(train_acc, 4), round(train_f1, 4), round(asr, 4)
 
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on https://arxiv.org/abs/2511.19339 
@@ -93,6 +96,7 @@ def representation_level_mia(
     # Five-fold cross-validation attack
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
     train_acc_list = []
+    train_f1_list = []
     asr_list = []
     for train_idx, test_idx in kf.split(X):
         X_train, y_train = X[train_idx], y[train_idx]
@@ -101,13 +105,17 @@ def representation_level_mia(
         clf.fit(X_train, y_train)
 
         train_acc = clf.score(X_train, y_train) * 100
+        train_preds = clf.predict(X_train)
+        train_f1 = f1_score(y_train, train_preds, average="macro") * 100
+        
         # Attack on forget set (should be members)
         forget_pred = clf.predict(forget_reps.numpy())
         asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
         
         train_acc_list.append(train_acc)
+        train_f1_list.append(train_f1)
         asr_list.append(asr)
-    return round(np.mean(train_acc_list), 4), round(np.mean(asr_list), 4)
+    return round(np.mean(train_acc_list), 4), round(np.mean(train_f1_list), 4), round(np.mean(asr_list), 4)
 
 
 # MIA in Representation Space based on https://openreview.net/forum?id=KzSGJy1PIf
@@ -136,10 +144,12 @@ def miars(
     knn.fit(X, y)
 
     train_acc = knn.score(X, y) * 100
+    train_preds = knn.predict(X)
+    train_f1 = f1_score(y, train_preds, average="macro") * 100
 
     forget_pred = knn.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return round(train_acc, 4), round(asr, 4)
+    return round(train_acc, 4), round(train_f1, 4), round(asr, 4)
 
 # MIA using MLP
 def mia_mlp(
@@ -214,13 +224,14 @@ def mia_mlp(
                 all_predictions.extend(predictions.cpu().numpy())
                 all_labels.extend(labels.cpu().numpy())
 
+        f1 = f1_score(all_labels, all_predictions, average="macro") * 100
         accuracy = (correct_predictions / total_samples) * 100.0
-        return round(accuracy, 4)
+        return round(accuracy, 4), round(f1, 4)
     
-    train_acc = evaluate(train_loader, model, device)
-    forget_acc = evaluate(val_loader, model, device)
+    train_acc, train_f1 = evaluate(train_loader, model, device)
+    forget_acc, _ = evaluate(val_loader, model, device)
 
-    return train_acc, forget_acc
+    return train_acc, train_f1, forget_acc
 
 def linear_probing(
     train_loader: DataLoader,
