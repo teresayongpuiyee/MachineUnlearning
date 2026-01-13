@@ -158,23 +158,27 @@ def main(args) -> None:
     forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
     test_reps, _ = repr_metrics.get_representations(test_loader, unlearned_model)
 
+    logger.info(f"Unlearned representation")
     repr_mia = repr_metrics.repr_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
         test_reps=test_reps
     )
+    logger.info(f"repr MIA: {repr_mia}")
 
     rmia = repr_metrics.representation_level_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
         test_reps=test_reps,
     )
+    logger.info(f"rMIA: {rmia}")
 
     miars = repr_metrics.miars(
         retain_reps=retain_reps,
         test_reps=test_reps,
         forget_reps=forget_reps,
     )
+    logger.info(f"MIARS: {miars}")
 
     linear_probe_acc = repr_metrics.linear_probing(
         train_loader= train_loader,
@@ -184,7 +188,16 @@ def main(args) -> None:
         num_classes= num_classes,
         lr= args.linear_probe_lr,
     )
-    logger.info(f"Unlearned representation - repr MIA: {repr_mia} rMIA: {rmia} MIARS: {miars} Linear probing acc: {linear_probe_acc}")
+    logger.info(f"Linear probing acc: {linear_probe_acc}")
+
+    mia_mlp_asr = repr_metrics.mia_mlp(
+        retain_reps=retain_reps,
+        test_reps=test_reps,
+        forget_reps=forget_reps,
+        device=device,
+        logger=logger,
+    )
+    logger.info(f"MIA MLP ASR: {mia_mlp_asr}")
     
     if args.tsne:
         repr_metrics.visualize_tsne(

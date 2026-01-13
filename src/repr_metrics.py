@@ -4,8 +4,9 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
+from model import models
 from sklearn.linear_model import LogisticRegression
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, TensorDataset
 from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import KFold
@@ -129,6 +130,81 @@ def miars(
     forget_pred = knn.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return round(asr, 4)
+
+# MIA using MLP
+def mia_mlp(
+    retain_reps: torch.tensor,
+    test_reps: torch.tensor,
+    forget_reps: torch.tensor,
+    device: torch.device,
+    num_epochs: int = 50,
+    logger = None,
+) -> float:
+    X_train_tensor = torch.cat([retain_reps, test_reps], dim=0)
+    Y_train_tensor = torch.cat([torch.ones(len(retain_reps)), torch.zeros(len(test_reps))]).unsqueeze(1)
+
+    X_val_tensor = forget_reps
+    Y_val_tensor = torch.zeros(len(X_val_tensor)).unsqueeze(1)
+
+    # Create Datasets and DataLoaders
+    train_dataset = TensorDataset(X_train_tensor, Y_train_tensor)
+    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
+
+    val_dataset = TensorDataset(X_val_tensor, Y_val_tensor)
+    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
+
+    model = models.AttackMLP(
+        input_size=512, 
+        hidden_1=128,
+        hidden_2=64,
+        output_size=1,
+    ).to(device)
+
+    criterion = nn.BCEWithLogitsLoss()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+
+    model.train()
+    for epoch in range(num_epochs):
+        running_loss = 0.0
+        for features, labels in train_loader:
+            features, labels = features.to(device), labels.to(device)
+            
+            optimizer.zero_grad()
+            logits = model(features)
+            loss = criterion(logits, labels)
+            loss.backward()
+            optimizer.step()
+            
+            running_loss += loss.item() * features.size(0)
+            
+        epoch_loss = running_loss / len(train_loader.dataset)
+        logger.info(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
+
+    model.eval() # Set model to evaluation mode
+    correct_predictions = 0
+    total_samples = 0
+    
+    all_predictions = []
+    all_labels = []
+
+    with torch.no_grad():
+        for features, labels in val_loader:
+            features, labels = features.to(device), labels.to(device)
+            
+            logits = model(features)
+            
+            # Apply Sigmoid and threshold to get binary prediction (0 or 1)
+            probabilities = torch.sigmoid(logits)
+            predictions = (probabilities >= 0.5).float()
+            
+            correct_predictions += (predictions == labels).sum().item()
+            total_samples += labels.size(0)
+            
+            all_predictions.extend(predictions.cpu().numpy())
+            all_labels.extend(labels.cpu().numpy())
+
+    accuracy = correct_predictions / total_samples
+    return round(accuracy * 100, 4)
 
 def linear_probing(
     train_loader: DataLoader,
