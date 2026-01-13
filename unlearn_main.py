@@ -7,6 +7,8 @@ import torch
 from unlearn_strategies import strategies
 import time
 import yaml
+import numpy as np
+from sklearn.model_selection import train_test_split
 
 parser = argparse.ArgumentParser()
 # Device
@@ -43,6 +45,7 @@ parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
 parser.add_argument("-model_path", type= str,
                     help= "Trained model path")
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
+parser.add_argument("-retain_subset", dest="retain_subset", action="store_true", default=False, help="Use subset of retain data for representation-level metrics")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -154,9 +157,24 @@ def main(args) -> None:
 
     # Representation-level evaluation
     train_reps, all_labels = repr_metrics.get_representations(train_loader, unlearned_model)
-    retain_reps, _ = repr_metrics.get_representations(retain_loader, unlearned_model)
+    retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
     forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
     test_reps, _ = repr_metrics.get_representations(test_loader, unlearned_model)
+
+    if args.retain_subset:
+        logger.info("Sampling subset of retain data for representation-level metrics")
+        target_size = test_reps.shape[0]
+
+        indices = np.arange(len(retain_reps))
+
+        _, sampled_indices = train_test_split(
+            indices,
+            test_size=target_size,
+            stratify=retain_labels.numpy(), # Still need numpy here for sklearn to read labels
+            random_state=42
+        )
+
+        retain_reps = retain_reps[sampled_indices]
 
     logger.info(f"Unlearned representation")
     train_repr_mia, train_f1_repr_mia, val_repr_mia = repr_metrics.repr_mia(
