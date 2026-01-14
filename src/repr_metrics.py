@@ -39,6 +39,33 @@ def get_representations(
             all_labels.append(target.cpu())
     return torch.cat(reps, dim=0), torch.cat(all_labels, dim=0)
 
+# Basic Representation-level Membership Inference Attack (MIA)
+def basic_repr_mia(
+    retain_reps: torch.tensor,
+    forget_reps: torch.tensor,
+    test_reps: torch.tensor,
+) -> float:
+    # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
+    X = torch.cat([retain_reps, test_reps], dim=0).numpy()
+    y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
+
+    clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
+    clf.fit(X, y)
+
+    train_acc = clf.score(X, y) * 100
+    train_preds = clf.predict(X)
+    train_f1 = f1_score(y, train_preds, average="macro") * 100
+
+    metrics_dict = {
+        "train_acc": round(float(train_acc), 4),
+        "train_f1": round(float(train_f1), 4),
+    }
+
+    # Attack on forget set (should be members)
+    forget_pred = clf.predict(forget_reps.numpy())
+    asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
+    return metrics_dict, round(asr, 4)
+
 # Representation-level Membership Inference Attack (MIA)
 def repr_mia(
     retain_reps: torch.tensor,

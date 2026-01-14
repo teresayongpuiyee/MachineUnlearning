@@ -135,7 +135,7 @@ def main(args) -> None:
         unlearn_loader=unlearn_loader,
         retain_loader=retain_loader,
         test_loader=test_loader,
-        test_retain_loader=test_retain_loader,
+        test_retain_loader=test_loader,
         num_channels=num_channels,
         num_classes=num_classes,
         device=device
@@ -185,6 +185,13 @@ def main(args) -> None:
         retain_reps = retain_reps[sampled_indices]
 
     logger.info(f"Unlearned representation")
+    basic_repr_mia_metrics, basic_repr_mia_asr = repr_metrics.basic_repr_mia(
+        retain_reps=retain_reps,
+        forget_reps=forget_reps,
+        test_reps=test_reps,
+    )
+    logger.info(f"Basic repr MIA: {basic_repr_mia_asr}")
+
     repr_mia_metrics, repr_mia_asr = repr_metrics.repr_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
@@ -206,15 +213,15 @@ def main(args) -> None:
     )
     logger.info(f"MIARS: {miars_asr}")
 
-    linear_probe_acc = repr_metrics.linear_probing(
-        train_loader= train_loader,
-        retain_loader= retain_loader,
-        forget_loader= unlearn_loader,
-        model= unlearned_model,
-        num_classes= num_classes,
-        lr= args.linear_probe_lr,
-    )
-    logger.info(f"Linear probing acc: {linear_probe_acc}")
+    #linear_probe_acc = repr_metrics.linear_probing(
+    #    train_loader= train_loader,
+    #    retain_loader= retain_loader,
+    #    forget_loader= unlearn_loader,
+    #    model= unlearned_model,
+    #    num_classes= num_classes,
+    #    lr= args.linear_probe_lr,
+    #)
+    #logger.info(f"Linear probing acc: {linear_probe_acc}")
 
     #mia_mlp_metrics, mia_mlp_asr = repr_metrics.mia_mlp(
     #    retain_reps=retain_reps,
@@ -240,17 +247,19 @@ def main(args) -> None:
         "classification/mia": float(mia),
         
         # attack model metrics
+        "representation/basic_repr_mia": basic_repr_mia_metrics,
         "representation/repr_mia": repr_mia_metrics,
         "representation/rmia": rmia_metrics,
         "representation/miars": miars_metrics,
         #"representation/mia_mlp": mia_mlp_metrics,
         
         # forget asr
+        "representation/basic_repr_mia": float(basic_repr_mia_asr),
         "representation/repr_mia_asr": float(repr_mia_asr),
         "representation/rmia_asr": float(rmia_asr),
         "representation/miars_asr": float(miars_asr),
         #"representation/mia_mlp_asr": float(mia_mlp_asr),
-        "representation/linear_probe_acc": linear_probe_acc,
+        #"representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
 
