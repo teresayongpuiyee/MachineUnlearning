@@ -34,6 +34,7 @@ def training_optimization(
         momentum = args.momentum
         weight_decay = args.weight_decay
         best_test_loss = float('inf')
+        best_test_acc = -float('inf')
         patience_counter = 0
     else:
         lr = 1e-4
@@ -90,6 +91,10 @@ def training_optimization(
                 else:
                     lr_scheduler.step()
 
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+                best_trained_model = copy.deepcopy(trained_model)
+
             if args.early_stop:
                 if test_loss < best_test_loss:
                     best_test_loss = test_loss
@@ -100,8 +105,10 @@ def training_optimization(
                 if patience_counter >= args.patience:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
+        else:
+            best_trained_model = copy.deepcopy(trained_model)
 
-    return trained_model
+    return best_trained_model
 
 
 def device_configuration(

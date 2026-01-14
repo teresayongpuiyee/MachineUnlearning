@@ -458,7 +458,7 @@ def visualize_tsne(
         random_state=42,
         n_jobs=-1,  # use all CPU cores
     )
-    reps_2d = tsne.fit_transform(reps)
+    reps_2d = tsne.fit(reps)
 
     # Ensure consistent color mapping: map each label to a specific color
     unique_labels = np.unique(all_labels)
