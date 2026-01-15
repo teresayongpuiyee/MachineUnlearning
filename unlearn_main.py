@@ -45,7 +45,6 @@ parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
 parser.add_argument("-model_path", type= str,
                     help= "Trained model path")
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
-parser.add_argument("-retain_subset", dest="retain_subset", action="store_true", default=False, help="Use subset of retain data for representation-level metrics")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -135,7 +134,7 @@ def main(args) -> None:
         unlearn_loader=unlearn_loader,
         retain_loader=retain_loader,
         test_loader=test_loader,
-        test_retain_loader=test_loader,
+        test_retain_loader=test_retain_loader,
         num_channels=num_channels,
         num_classes=num_classes,
         device=device
@@ -159,7 +158,7 @@ def main(args) -> None:
     mia = metrics.mia(
         retain_loader=retain_loader,
         forget_loader=unlearn_loader,
-        test_loader=test_loader,
+        test_loader=test_retain_loader,
         model=unlearned_model)
     logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia}")
 
@@ -167,70 +166,62 @@ def main(args) -> None:
     train_reps, all_labels = repr_metrics.get_representations(train_loader, unlearned_model)
     retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
     forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
-    test_reps, _ = repr_metrics.get_representations(test_loader, unlearned_model)
-
-    if args.retain_subset:
-        logger.info("Sampling subset of retain data for representation-level metrics")
-        target_size = test_reps.shape[0]
-
-        indices = np.arange(len(retain_reps))
-
-        _, sampled_indices = train_test_split(
-            indices,
-            test_size=target_size,
-            stratify=retain_labels.numpy(),
-            random_state=42
-        )
-
-        retain_reps = retain_reps[sampled_indices]
+    test_retain_reps, _ = repr_metrics.get_representations(test_retain_loader, unlearned_model)
 
     logger.info(f"Unlearned representation")
+    # Rep-MIA without balance and normalize features
     basic_repr_mia_metrics, basic_repr_mia_asr = repr_metrics.basic_repr_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
-        test_reps=test_reps,
+        test_reps=test_retain_reps,
     )
     logger.info(f"Basic repr MIA: {basic_repr_mia_asr}")
 
+    logger.info("Sampling subset of retain data for representation-level metrics")
+    target_size = test_retain_reps.shape[0]
+
+    indices = np.arange(len(retain_reps))
+
+    _, sampled_indices = train_test_split(
+        indices,
+        test_size=target_size,
+        stratify=retain_labels.numpy(),
+        random_state=42
+    )
+
+    retain_reps = retain_reps[sampled_indices]
+
+    # Rep-MIA with balance and normalize features
     repr_mia_metrics, repr_mia_asr = repr_metrics.repr_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
-        test_reps=test_reps
+        test_reps=test_retain_reps
     )
     logger.info(f"repr MIA: {repr_mia_asr}")
 
     rmia_metrics, rmia_asr = repr_metrics.representation_level_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
-        test_reps=test_reps,
+        test_reps=test_retain_reps,
     )
     logger.info(f"rMIA: {rmia_asr}")
 
     miars_metrics, miars_asr = repr_metrics.miars(
         retain_reps=retain_reps,
-        test_reps=test_reps,
+        test_reps=test_retain_reps,
         forget_reps=forget_reps,
     )
     logger.info(f"MIARS: {miars_asr}")
 
-    #linear_probe_acc = repr_metrics.linear_probing(
-    #    train_loader= train_loader,
-    #    retain_loader= retain_loader,
-    #    forget_loader= unlearn_loader,
-    #    model= unlearned_model,
-    #    num_classes= num_classes,
-    #    lr= args.linear_probe_lr,
-    #)
-    #logger.info(f"Linear probing acc: {linear_probe_acc}")
-
-    #mia_mlp_metrics, mia_mlp_asr = repr_metrics.mia_mlp(
-    #    retain_reps=retain_reps,
-    #    test_reps=test_reps,
-    #    forget_reps=forget_reps,
-    #    device=device,
-    #    logger=logger,
-    #)
-    #logger.info(f"MIA MLP: {mia_mlp_asr}")
+    linear_probe_acc = repr_metrics.linear_probing(
+        train_loader= train_loader,
+        retain_loader= retain_loader,
+        forget_loader= unlearn_loader,
+        model= unlearned_model,
+        num_classes= num_classes,
+        lr= args.linear_probe_lr,
+    )
+    logger.info(f"Linear probing acc: {linear_probe_acc}")
     
     if args.tsne:
         repr_metrics.visualize_tsne(
@@ -251,15 +242,13 @@ def main(args) -> None:
         "representation/repr_mia": repr_mia_metrics,
         "representation/rmia": rmia_metrics,
         "representation/miars": miars_metrics,
-        #"representation/mia_mlp": mia_mlp_metrics,
         
         # forget asr
         "representation/basic_repr_mia": float(basic_repr_mia_asr),
         "representation/repr_mia_asr": float(repr_mia_asr),
         "representation/rmia_asr": float(rmia_asr),
         "representation/miars_asr": float(miars_asr),
-        #"representation/mia_mlp_asr": float(mia_mlp_asr),
-        #"representation/linear_probe_acc": linear_probe_acc,
+        "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
 

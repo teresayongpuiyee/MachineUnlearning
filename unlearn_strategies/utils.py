@@ -91,10 +91,12 @@ def training_optimization(
                 else:
                     lr_scheduler.step()
 
+            # Get retrain model with best test acc
             if test_acc > best_test_acc:
                 best_test_acc = test_acc
                 best_trained_model = copy.deepcopy(trained_model)
 
+            # To prevent overfitting
             if args.early_stop:
                 if test_loss < best_test_loss:
                     best_test_loss = test_loss

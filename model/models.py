@@ -100,22 +100,3 @@ class LRTorchNet(nn.Module):
     def forward(self, x):
         outputs = torch.sigmoid(self.linear(x))
         return outputs
-
-class AttackMLP(nn.Module):
-    def __init__(self, input_size, hidden_1, hidden_2, output_size):
-        super(AttackMLP, self).__init__()
-        
-        # Define the layers
-        self.layer_stack = nn.Sequential(
-            nn.Linear(input_size, hidden_1),
-            nn.ReLU(),
-            nn.Dropout(0.2), # Dropout for regularization (preventing attack model overfitting)
-            nn.Linear(hidden_1, hidden_2),
-            nn.ReLU(),
-            nn.Linear(hidden_2, output_size) # Output raw logits (no sigmoid here)
-        )
-
-    def forward(self, x):
-        # x is the feature vector (batch_size, 512)
-        logits = self.layer_stack(x)
-        return logits

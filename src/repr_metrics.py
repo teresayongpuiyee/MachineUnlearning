@@ -4,9 +4,8 @@ import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
-from model import models
 from sklearn.linear_model import LogisticRegression
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader
 from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import StratifiedKFold, train_test_split
@@ -39,7 +38,7 @@ def get_representations(
             all_labels.append(target.cpu())
     return torch.cat(reps, dim=0), torch.cat(all_labels, dim=0)
 
-# Basic Representation-level Membership Inference Attack (MIA)
+# Rep-MIA without balance and normalize features
 def basic_repr_mia(
     retain_reps: torch.tensor,
     forget_reps: torch.tensor,
@@ -66,7 +65,7 @@ def basic_repr_mia(
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return metrics_dict, round(asr, 4)
 
-# Representation-level Membership Inference Attack (MIA)
+# Rep-MIA with balance and normalize features
 def repr_mia(
     retain_reps: torch.tensor,
     forget_reps: torch.tensor,
@@ -79,8 +78,8 @@ def repr_mia(
     X, X_test, y, y_test = train_test_split(
         X_full, 
         y_full, 
-        test_size=0.2,           # 20% for evaluating the attack
-        stratify=y_full,          # Essential: maintains the 50/50 member/non-member ratio
+        test_size=0.2,
+        stratify=y_full,
         random_state=42
     )
 
@@ -113,7 +112,7 @@ def repr_mia(
     return metrics_dict, round(asr, 4)
 
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
-# based on https://arxiv.org/abs/2511.19339 
+# based on POUR: https://arxiv.org/abs/2511.19339 
 def representation_level_mia(
     retain_reps: torch.tensor,
     forget_reps: torch.tensor,
@@ -180,7 +179,7 @@ def representation_level_mia(
     return metrics_dict, round(np.mean(asr_list), 4)
 
 
-# MIA in Representation Space based on https://openreview.net/forum?id=KzSGJy1PIf
+# MIA in Representation Space based on SURE: https://openreview.net/forum?id=KzSGJy1PIf
 def miars(
     retain_reps: torch.tensor,
     test_reps: torch.tensor,
@@ -188,10 +187,10 @@ def miars(
     n_neighbors: int = 5
 ) -> float:
     """
-    Trains a KNN classifier to distinguish between train and test samples based on their representations,
+    Trains a KNN classifier to distinguish between retain and test samples based on their representations,
     then applies the trained KNN to classify the forget samples and calculates the attack success rate (ASR).
     Args:
-        retain_reps: Representations for the train set
+        retain_reps: Representations for the retain set
         test_reps: Representations for the test set
         forget_reps: Representations for the forget set
         n_neighbors: Number of neighbors for KNN
@@ -205,8 +204,8 @@ def miars(
     X, X_test, y, y_test = train_test_split(
         X_full, 
         y_full, 
-        test_size=0.2,           # 20% for evaluating the attack
-        stratify=y_full,          # Essential: maintains the 50/50 member/non-member ratio
+        test_size=0.2,
+        stratify=y_full,
         random_state=42
     )
 
@@ -237,93 +236,6 @@ def miars(
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return metrics_dict, round(asr, 4)
 
-# MIA using MLP
-def mia_mlp(
-    retain_reps: torch.tensor,
-    test_reps: torch.tensor,
-    forget_reps: torch.tensor,
-    device: torch.device,
-    num_epochs: int = 50,
-    logger = None,
-) -> float:
-    X_train_tensor = torch.cat([retain_reps, test_reps], dim=0)
-    Y_train_tensor = torch.cat([torch.ones(len(retain_reps)), torch.zeros(len(test_reps))]).unsqueeze(1)
-
-    X_val_tensor = forget_reps
-    Y_val_tensor = torch.zeros(len(X_val_tensor)).unsqueeze(1)
-
-    # Create Datasets and DataLoaders
-    train_dataset = TensorDataset(X_train_tensor, Y_train_tensor)
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True)
-
-    val_dataset = TensorDataset(X_val_tensor, Y_val_tensor)
-    val_loader = DataLoader(val_dataset, batch_size=64, shuffle=False)
-
-    model = models.AttackMLP(
-        input_size=512, 
-        hidden_1=128,
-        hidden_2=64,
-        output_size=1,
-    ).to(device)
-
-    criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
-
-    model.train()
-    for epoch in range(num_epochs):
-        running_loss = 0.0
-        for features, labels in train_loader:
-            features, labels = features.to(device), labels.to(device)
-            
-            optimizer.zero_grad()
-            logits = model(features)
-            loss = criterion(logits, labels)
-            loss.backward()
-            optimizer.step()
-            
-            running_loss += loss.item() * features.size(0)
-            
-        epoch_loss = running_loss / len(train_loader.dataset)
-        logger.info(f'Epoch {epoch+1}/{num_epochs}, Loss: {epoch_loss:.4f}')
-
-    def evaluate(val_loader: DataLoader, model: torch.nn.Module, device: torch.device) -> float:
-        model.eval() # Set model to evaluation mode
-        correct_predictions = 0
-        total_samples = 0
-        
-        all_predictions = []
-        all_labels = []
-
-        with torch.no_grad():
-            for features, labels in val_loader:
-                features, labels = features.to(device), labels.to(device)
-                
-                logits = model(features)
-                
-                # Apply Sigmoid and threshold to get binary prediction (0 or 1)
-                probabilities = torch.sigmoid(logits)
-                predictions = (probabilities >= 0.5).float()
-                
-                correct_predictions += (predictions == labels).sum().item()
-                total_samples += labels.size(0)
-                
-                all_predictions.extend(predictions.cpu().numpy())
-                all_labels.extend(labels.cpu().numpy())
-
-        f1 = f1_score(all_labels, all_predictions, average="macro") * 100
-        accuracy = (correct_predictions / total_samples) * 100.0
-        return round(accuracy, 4), round(f1, 4)
-    
-    train_acc, train_f1 = evaluate(train_loader, model, device)
-    forget_acc, _ = evaluate(val_loader, model, device)
-
-    metrics_dict = {
-        "train_acc": float(train_acc),
-        "train_f1": float(train_f1),
-    }
-
-    return metrics_dict, forget_acc
-
 def linear_probing(
     train_loader: DataLoader,
     retain_loader: DataLoader,
@@ -337,7 +249,7 @@ def linear_probing(
     Trains a linear probe (head) on top of frozen model representations using SGD and cross-entropy,
     then evaluates accuracy on both the retain and forget sets.
 
-    Reference: https://github.com/KU-VGI/ESC/blob/main/evaluation.py
+    Reference: ESC - https://github.com/KU-VGI/ESC/blob/main/evaluation.py
     Args:
         train_loader: DataLoader for training the linear head
         retain_loader: DataLoader for the retain (remaining) set
