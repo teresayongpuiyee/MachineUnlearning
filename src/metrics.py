@@ -144,7 +144,7 @@ def get_membership_attack_data(
 
 
 # https://arxiv.org/abs/2205.08096
-def mia(
+def badt_mia(
     retain_loader,
     forget_loader,
     test_loader,
@@ -174,6 +174,6 @@ def model_evaluation(
 
     retain_acc = evaluate(val_loader= retain_loader, model= model, device= device)["Acc"]
     unlearn_acc = evaluate(val_loader= unlearn_loader, model= model, device= device)["Acc"]
-    mia_asr = mia(retain_loader= retain_loader, forget_loader= unlearn_loader, test_loader= test_loader, model= model)
+    mia_asr = badt_mia(retain_loader= retain_loader, forget_loader= unlearn_loader, test_loader= test_loader, model= model)
 
     return retain_acc, unlearn_acc, mia_asr
