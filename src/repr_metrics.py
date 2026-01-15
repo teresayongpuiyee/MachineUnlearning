@@ -10,6 +10,7 @@ from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import f1_score
+from typing import Tuple, Optional
 
 # t-SNE visualization
 import matplotlib.pyplot as plt
@@ -39,7 +40,7 @@ def get_representations(
     return torch.cat(reps, dim=0), torch.cat(all_labels, dim=0)
 
 # Rep-MIA without balance and normalize features
-def basic_repr_mia(
+def basic_rep_mia(
     retain_reps: torch.tensor,
     forget_reps: torch.tensor,
     test_reps: torch.tensor,
@@ -63,14 +64,27 @@ def basic_repr_mia(
     # Attack on forget set (should be members)
     forget_pred = clf.predict(forget_reps.numpy())
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return metrics_dict, round(asr, 4)
+    return metrics_dict, round(float(asr), 4)
 
 # Rep-MIA with balance and normalize features
-def repr_mia(
+def badt_rep_mia(
     retain_reps: torch.tensor,
     forget_reps: torch.tensor,
     test_reps: torch.tensor,
+    retain_labels: torch.tensor,
 ) -> float:
+    # Subsampling of retain data
+    target_size = test_reps.shape[0]
+
+    indices = np.arange(len(retain_reps))
+    _, sampled_indices = train_test_split(
+        indices,
+        test_size=target_size,
+        stratify=retain_labels.numpy(),
+        random_state=42
+    )
+    retain_reps = retain_reps[sampled_indices]
+
     # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
     X_full = torch.cat([retain_reps, test_reps], dim=0).numpy()
     y_full = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
@@ -83,6 +97,7 @@ def repr_mia(
         random_state=42
     )
 
+    # Feature normalization
     scaler = StandardScaler()
     X = scaler.fit_transform(X)
     X_test = scaler.transform(X_test)
@@ -109,132 +124,181 @@ def repr_mia(
     # Attack on forget set (should be members)
     forget_pred = clf.predict(forget_X)
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return metrics_dict, round(asr, 4)
+    return metrics_dict, round(float(asr), 4)
 
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on POUR: https://arxiv.org/abs/2511.19339 
-def representation_level_mia(
-    retain_reps: torch.tensor,
-    forget_reps: torch.tensor,
+def pour_rmia(
+    train_reps: torch.tensor,
     test_reps: torch.tensor,
-) -> float:
+    train_labels: torch.tensor,
+    test_labels: torch.tensor,
+    unlearn_class: int
+) -> Tuple[dict, Optional[float]]:
     """
-    Perform a five-fold membership inference attack on the forget set using representations from a specified layer.
+    Representation-level membership-inference attack success rate on forget set. Perform a five-fold attack
+    using a linear regressor on the representation between the train and test sets
     Args:
-        retain_reps: Representations for the retain (train) set
-        forget_reps: Representations for the forget set (attack target)
+        train_reps: Representations for the train set (member)
         test_reps: Representations for the test set (non-member)
+        train_labels: Labels for the train set
+        test_labels: Labels for the test set
+        unlearn_class: The class label that was unlearned (forgotten)
     Returns:
         Attack model metrics (dict)
-        Attack success rate (float, percent)
-    """    
-    # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
-    X = torch.cat([retain_reps, test_reps], dim=0).numpy()
-    y = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
+        Attack success rate (float or None): Percent of forget samples classified as train/member)
+    """
+    # Subsampling to balance Member (1) and Non-Member (0) classes
+    target_size = test_reps.shape[0]
+    if len(train_reps) > target_size:
+        indices = np.arange(len(train_reps))
+        # Stratify by labels to ensure we don't lose the unlearn_class during sampling
+        _, sampled_indices = train_test_split(
+            indices,
+            test_size=target_size,
+            stratify=train_labels.numpy(),
+            random_state=42
+        )
+        train_reps = train_reps[sampled_indices]
+        train_labels = train_labels[sampled_indices]
+    
+    # Prepare data for attack
+    X_full = torch.cat([train_reps, test_reps], dim=0).numpy()
+    X_labels = np.concatenate([train_labels.numpy(), test_labels.numpy()])
+    y_full = np.concatenate([np.ones(len(train_reps)), np.zeros(len(test_reps))])
+    
+    strat_key = np.array([f"{lbl}_{mem}" for lbl, mem in zip(X_labels, y_full)])
 
     # Five-fold cross-validation attack
     kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    train_acc_list = []
-    train_f1_list = []
-    test_acc_list = []
-    test_f1_list = []
-    asr_list = []
-    for train_idx, test_idx in kf.split(X, y):
-        X_train, y_train = X[train_idx], y[train_idx]
-        X_test, y_test = X[test_idx], y[test_idx]
 
+    results = {"train_acc": [], "train_f1": [], "test_acc": [], "test_f1": [], "forget_asr": []}
+
+    for train_idx, test_idx in kf.split(X_full, strat_key):
+        X_train, y_train = X_full[train_idx], y_full[train_idx]
+        X_test, y_test, X_test_labels = X_full[test_idx], y_full[test_idx], X_labels[test_idx]
+
+        # Feature normalization
         scaler = StandardScaler()
         X_train = scaler.fit_transform(X_train)
         X_test = scaler.transform(X_test)
-        forget_X = scaler.transform(forget_reps.numpy())
 
         clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
         clf.fit(X_train, y_train)
 
-        train_acc = clf.score(X_train, y_train) * 100
         train_preds = clf.predict(X_train)
-        train_f1 = f1_score(y_train, train_preds, average="macro") * 100
-
-        test_acc = clf.score(X_test, y_test) * 100
         test_preds = clf.predict(X_test)
-        test_f1 = f1_score(y_test, test_preds, average="macro") * 100
         
-        # Attack on forget set (should be members)
-        forget_pred = clf.predict(forget_X)
-        asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-        
-        train_acc_list.append(train_acc)
-        train_f1_list.append(train_f1)
-        test_acc_list.append(test_acc)
-        test_f1_list.append(test_f1)
-        asr_list.append(asr)
+        results["train_acc"].append(clf.score(X_train, y_train))
+        results["train_f1"].append(f1_score(y_train, train_preds, average="macro"))
+        results["test_acc"].append(clf.score(X_test, y_test))
+        results["test_f1"].append(f1_score(y_test, test_preds, average="macro"))
+
+        # MIA logic: How many 'forgotten' samples are predicted as Members (label 1)?
+        mask = (X_test_labels == unlearn_class) & (y_test == 1)
+        if mask.any():
+            forget_preds = clf.predict(X_test[mask])
+            results["forget_asr"].append(forget_preds.mean())
 
     metrics_dict = {
-        "train_acc": round(float(np.mean(train_acc_list)), 4),
-        "train_f1": round(float(np.mean(train_f1_list)), 4),
-        "test_acc": round(float(np.mean(test_acc_list)), 4),
-        "test_f1": round(float(np.mean(test_f1_list)), 4),
+        "train_acc": round(float(np.mean(results["train_acc"])* 100), 4),
+        "train_f1": round(float(np.mean(results["train_f1"])* 100), 4),
+        "test_acc": round(float(np.mean(results["test_acc"])* 100), 4),
+        "test_f1": round(float(np.mean(results["test_f1"])* 100), 4),
     }
 
-    return metrics_dict, round(np.mean(asr_list), 4)
+    forget_asr =None
+    if results["forget_asr"]:
+        forget_asr = round(float(np.mean(results["forget_asr"]) * 100), 4)
+
+    return metrics_dict, forget_asr
 
 
 # MIA in Representation Space based on SURE: https://openreview.net/forum?id=KzSGJy1PIf
-def miars(
-    retain_reps: torch.tensor,
+def sure_miars(
+    train_reps: torch.tensor,
     test_reps: torch.tensor,
-    forget_reps: torch.tensor,
-    n_neighbors: int = 5
-) -> float:
+    train_labels: torch.tensor,
+    test_labels: torch.tensor,
+    unlearn_class: int,
+    n_neighbors: int = 5,
+) -> Tuple[dict, Optional[float]]:
     """
-    Trains a KNN classifier to distinguish between retain and test samples based on their representations,
+    Trains a KNN classifier to distinguish between train and test samples based on their representations,
     then applies the trained KNN to classify the forget samples and calculates the attack success rate (ASR).
     Args:
-        retain_reps: Representations for the retain set
-        test_reps: Representations for the test set
-        forget_reps: Representations for the forget set
+        train_reps: Representations for the train set (member)
+        test_reps: Representations for the test set (non-member)
+        train_labels: Labels for the train set
+        test_labels: Labels for the test set
+        unlearn_class: The class label that was unlearned (forgotten)
         n_neighbors: Number of neighbors for KNN
     Returns:
         Attack model metrics (dict)
-        Attack success rate (float, percent of forget samples classified as train/member)
+        Attack success rate (float or None): Percent of forget samples classified as train/member)
     """
-    X_full = torch.cat([retain_reps, test_reps], dim=0).numpy()
-    y_full = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
+    # Subsampling to balance Member (1) and Non-Member (0) classes
+    target_size = test_reps.shape[0]
+    if len(train_reps) > target_size:
+        indices = np.arange(len(train_reps))
+        # Stratify by labels to ensure we don't lose the unlearn_class during sampling
+        _, sampled_indices = train_test_split(
+            indices,
+            test_size=target_size,
+            stratify=train_labels.numpy(),
+            random_state=42
+        )
+        train_reps = train_reps[sampled_indices]
+        train_labels = train_labels[sampled_indices]
 
-    X, X_test, y, y_test = train_test_split(
-        X_full, 
-        y_full, 
+    # Prepare data for attack
+    X_full = torch.cat([train_reps, test_reps], dim=0).numpy()
+    X_labels = np.concatenate([train_labels.numpy(), test_labels.numpy()])
+    y_full = np.concatenate([np.ones(len(train_reps)), np.zeros(len(test_reps))])
+
+    strat_key = np.array([f"{lbl}_{mem}" for lbl, mem in zip(X_labels, y_full)])
+
+    X_train, X_test, y_train, y_test, _, X_test_labels = train_test_split(
+        X_full,
+        y_full,
+        X_labels,
         test_size=0.2,
-        stratify=y_full,
+        stratify=strat_key,   # Stratify using the combined key
         random_state=42
     )
 
+    # Feature normalization
     scaler = StandardScaler()
-    X = scaler.fit_transform(X)
+    X_train = scaler.fit_transform(X_train)
     X_test = scaler.transform(X_test)
-    forget_X = scaler.transform(forget_reps.numpy())
 
     knn = KNeighborsClassifier(n_neighbors=n_neighbors)
-    knn.fit(X, y)
+    knn.fit(X_train, y_train)
 
-    train_acc = knn.score(X, y) * 100
-    train_preds = knn.predict(X)
-    train_f1 = f1_score(y, train_preds, average="macro") * 100
+    train_acc = knn.score(X_train, y_train)
+    train_preds = knn.predict(X_train)
+    train_f1 = f1_score(y_train, train_preds, average="macro")
 
-    test_acc = knn.score(X_test, y_test) * 100
+    test_acc = knn.score(X_test, y_test)
     test_preds = knn.predict(X_test)
-    test_f1 = f1_score(y_test, test_preds, average="macro") * 100
+    test_f1 = f1_score(y_test, test_preds, average="macro")
+
+    # MIA logic: How many 'forgotten' samples are predicted as Members (label 1)?
+    mask = (X_test_labels == unlearn_class) & (y_test == 1)
+    if mask.any():
+        forget_preds = knn.predict(X_test[mask])
+        forget_asr = round(float(forget_preds.mean() * 100), 4)
+    else:
+        forget_asr = None
 
     metrics_dict = {
-        "train_acc": round(float(train_acc), 4),
-        "train_f1": round(float(train_f1), 4),
-        "test_acc": round(float(test_acc), 4),
-        "test_f1": round(float(test_f1), 4),
+        "train_acc": round(float(train_acc * 100), 4),
+        "train_f1": round(float(train_f1 * 100), 4),
+        "test_acc": round(float(test_acc * 100), 4),
+        "test_f1": round(float(test_f1 * 100), 4),
     }
 
-    forget_pred = knn.predict(forget_X)
-    asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
-    return metrics_dict, round(asr, 4)
+    return metrics_dict, forget_asr
 
 def linear_probing(
     train_loader: DataLoader,

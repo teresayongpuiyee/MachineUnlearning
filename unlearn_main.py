@@ -7,8 +7,6 @@ import torch
 from unlearn_strategies import strategies
 import time
 import yaml
-import numpy as np
-from sklearn.model_selection import train_test_split
 
 parser = argparse.ArgumentParser()
 # Device
@@ -103,7 +101,7 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
+    test_retain_dataset, _ = dataset.split_unlearn_dataset(
         dataset=test_dataset,
         unlearn_class=args.unlearn_class
     )
@@ -113,7 +111,6 @@ def main(args) -> None:
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
     test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=True)
-    test_unlearn_loader = DataLoader(test_unlearn_dataset, batch_size=args.batch_size, shuffle=True)
 
     # Model preparation
     model = getattr(models, args.model)(
@@ -157,65 +154,54 @@ def main(args) -> None:
 
     # Evaluation after unlearning
     # Classification-level evaluation
+    logger.info(f"Unlearned classification")
     retain_acc = metrics.evaluate(val_loader=retain_loader, model=unlearned_model, device=device)['Acc']
+    logger.info(f"Retain acc: {retain_acc}")
     unlearn_acc = metrics.evaluate(val_loader=unlearn_loader, model=unlearned_model, device=device)['Acc']
-    mia = metrics.mia(
+    logger.info(f"Unlearn_acc: {unlearn_acc}")
+    # Bad Teacher MIA
+    badt_mia = metrics.badt_mia(
         retain_loader=retain_loader,
         forget_loader=unlearn_loader,
-        test_loader=test_retain_loader,
+        test_loader=test_loader,
         model=unlearned_model)
-    logger.info(f"Unlearned classification - Retain acc: {retain_acc} Unlearn_acc: {unlearn_acc} MIA: {mia}")
+    logger.info(f"Bad T MIA: {badt_mia}")
 
     # Representation-level evaluation
-    train_reps, all_labels = repr_metrics.get_representations(train_loader, unlearned_model)
+    train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
+    test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
     retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
     forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
-    test_retain_reps, _ = repr_metrics.get_representations(test_retain_loader, unlearned_model)
 
     logger.info(f"Unlearned representation")
-    # Rep-MIA without balance and normalize features
-    basic_repr_mia_metrics, basic_repr_mia_asr = repr_metrics.basic_repr_mia(
+    # Bad Teacher equivalent Rep-MIA with balance and normalize features
+    badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
-        test_reps=test_retain_reps,
+        test_reps=test_reps,
+        retain_labels=retain_labels
     )
-    logger.info(f"Basic repr MIA: {basic_repr_mia_asr}")
+    logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
 
-    logger.info("Sampling subset of retain data for representation-level metrics")
-    target_size = test_retain_reps.shape[0]
-
-    indices = np.arange(len(retain_reps))
-
-    _, sampled_indices = train_test_split(
-        indices,
-        test_size=target_size,
-        stratify=retain_labels.numpy(),
-        random_state=42
+    # POUR
+    pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
+        train_reps=train_reps,
+        test_reps=test_reps,
+        train_labels=train_labels,
+        test_labels=test_labels,
+        unlearn_class=args.unlearn_class,
     )
+    logger.info(f"POUR rMIA: {pour_rmia_asr}")
 
-    retain_reps = retain_reps[sampled_indices]
-
-    # Rep-MIA with balance and normalize features
-    repr_mia_metrics, repr_mia_asr = repr_metrics.repr_mia(
-        retain_reps=retain_reps,
-        forget_reps=forget_reps,
-        test_reps=test_retain_reps
+    # SURE
+    sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
+        train_reps=train_reps,
+        test_reps=test_reps,
+        train_labels=train_labels,
+        test_labels=test_labels,
+        unlearn_class=args.unlearn_class,
     )
-    logger.info(f"repr MIA: {repr_mia_asr}")
-
-    rmia_metrics, rmia_asr = repr_metrics.representation_level_mia(
-        retain_reps=retain_reps,
-        forget_reps=forget_reps,
-        test_reps=test_retain_reps,
-    )
-    logger.info(f"rMIA: {rmia_asr}")
-
-    miars_metrics, miars_asr = repr_metrics.miars(
-        retain_reps=retain_reps,
-        test_reps=test_retain_reps,
-        forget_reps=forget_reps,
-    )
-    logger.info(f"MIARS: {miars_asr}")
+    logger.info(f"SURE MIARS: {sure_miars_asr}")
 
     linear_probe_acc = repr_metrics.linear_probing(
         train_loader= train_loader,
@@ -230,7 +216,7 @@ def main(args) -> None:
     if args.tsne:
         repr_metrics.visualize_tsne(
             reps=train_reps,
-            all_labels=all_labels,
+            all_labels=train_labels,
             unlearn_method=args.unlearn_method,
             exp_name=exp_name
         )
@@ -239,19 +225,17 @@ def main(args) -> None:
     metrics_dict = {
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
-        "classification/mia": float(mia),
+        "classification/badt_mia": float(badt_mia),
         
         # attack model metrics
-        "representation/basic_repr_mia": basic_repr_mia_metrics,
-        "representation/repr_mia": repr_mia_metrics,
-        "representation/rmia": rmia_metrics,
-        "representation/miars": miars_metrics,
+        "representation/badt_rep_mia": badt_rep_mia_metrics,
+        "representation/pour_rmia": pour_rmia_metrics,
+        "representation/sure_miars": sure_miars_metrics,
         
         # forget asr
-        "representation/basic_repr_mia": float(basic_repr_mia_asr),
-        "representation/repr_mia_asr": float(repr_mia_asr),
-        "representation/rmia_asr": float(rmia_asr),
-        "representation/miars_asr": float(miars_asr),
+        "representation/badt_rep_mia_asr": badt_rep_mia_asr,
+        "representation/pour_rmia_asr": pour_rmia_asr,
+        "representation/sure_miars_asr": sure_miars_asr,
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
