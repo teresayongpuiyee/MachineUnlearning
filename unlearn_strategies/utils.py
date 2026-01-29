@@ -7,7 +7,7 @@ import copy
 from torch import nn
 from tqdm import tqdm
 import numpy as np
-from src import metrics, scheduler
+from src import metrics, scheduler, utils
 import argparse
 from typing import Tuple
 import os
@@ -36,6 +36,13 @@ def training_optimization(
         best_test_loss = float('inf')
         best_test_acc = -float('inf')
         patience_counter = 0
+
+        trained_model = utils.load_pretrained_weights(
+            model= trained_model,
+            pretrained_weight= args.pretrained_weight,
+            device= device,
+            logger= logger,
+        )
     else:
         lr = 1e-4
         momentum = 0.5

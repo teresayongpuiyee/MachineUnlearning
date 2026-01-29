@@ -126,3 +126,28 @@ def configure_logger(log_file):
     logger = logging.getLogger(__name__)
 
     return logger
+
+def load_pretrained_weights(
+    model: torch.nn.Module,
+    pretrained_weight: str,
+    device: torch.device,
+    logger: logging.Logger,
+) -> torch.nn.Module:
+    if len(pretrained_weight):
+        logger.info(f"Use pretrained model from {pretrained_weight}")
+        state_dict = torch.load(pretrained_weight, map_location=device)
+
+        keys_to_remove = ['fc.weight', 'fc.bias'] 
+        for key in keys_to_remove:
+            if key in state_dict:
+                del state_dict[key] 
+                logger.info(f"✅ Key removed successfully: {key}")
+            else:
+                logger.info(f"Warning: Expected key '{key}' not found in state_dict.")
+
+        model.load_state_dict(state_dict, strict=False)
+        logger.info(f"Loaded pretrained model from {pretrained_weight}")
+    else:
+        logger.info("No pretrained model path provided, training from scratch.")
+    
+    return model

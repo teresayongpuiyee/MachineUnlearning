@@ -125,19 +125,12 @@ if __name__ == "__main__":
     model = getattr(models, args.model)(
         num_classes= num_classes, input_channels= num_channels).to(device)
 
-    if len(args.pretrained_weight):
-        state_dict = torch.load(args.pretrained_weight, map_location=device)
-
-        keys_to_remove = ['fc.weight', 'fc.bias'] 
-        for key in keys_to_remove:
-            if key in state_dict:
-                del state_dict[key] 
-                logger.info(f"✅ Key removed successfully: {key}")
-            else:
-                logger.info(f"Warning: Expected key '{key}' not found in state_dict.")
-
-        model.load_state_dict(state_dict, strict=False)
-        logger.info(f"Loaded pretrained model from {args.pretrained_weight}")
+    model = utils.load_pretrained_weights(
+        model= model,
+        pretrained_weight= args.pretrained_weight,
+        device= device,
+        logger= logger,
+    )
 
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
