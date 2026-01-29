@@ -39,7 +39,7 @@ def training_optimization(
 
         trained_model = utils.load_pretrained_weights(
             model= trained_model,
-            pretrained_weight= args.pretrained_weight,
+            pretrained_weight= args.retrain_pretrained_weight,
             device= device,
             logger= logger,
         )

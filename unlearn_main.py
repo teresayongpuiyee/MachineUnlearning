@@ -25,7 +25,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Dataset root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-save_model", dest="save_model", action="store_true", default= False, help= "Save trained model option")
-parser.add_argument("-pretrained_weight", type= str, default= "", help= "Pretrained model path")
+parser.add_argument("-retrain_pretrained_weight", type= str, default= "", help= "Pretrained model path")
 
 # Unlearn configuration
 parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
