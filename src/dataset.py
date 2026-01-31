@@ -51,6 +51,11 @@ def split_unlearn_dataset(
             unlearn_ds.append([x,y])
         else:
             retain_ds.append([x,y])
+            #if y < unlearn_class:
+            #    retain_ds.append([x,y])
+            #else:
+            #    y = y - 1
+            #    retain_ds.append([x,y])
     return retain_ds, unlearn_ds
 
 

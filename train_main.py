@@ -118,8 +118,20 @@ if __name__ == "__main__":
         dataset_name= args.dataset, root= args.root
     )
 
-    train_loader = DataLoader(train_dataset, batch_size= args.batch_size, shuffle= True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle= True)
+    #num_classes = num_classes - 1  # Adjust number of classes after unlearning
+
+    retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
+        data_list=train_dataset,
+        unlearn_class=0
+    )
+
+    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
+        data_list=test_dataset,
+        unlearn_class=0
+    )
+
+    train_loader = DataLoader(retain_dataset, batch_size= args.batch_size, shuffle= True)
+    test_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle= True)
 
     # Model preparation
     model = getattr(models, args.model)(
