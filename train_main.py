@@ -113,25 +113,27 @@ if __name__ == "__main__":
     # Device
     device, device_name = utils.device_configuration(args= args)
 
-    # Dataset
+    # Load the full datasets
     train_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
-        dataset_name= args.dataset, root= args.root
+        dataset_name=args.dataset, root=args.root
     )
 
-    num_classes = num_classes - 1  # Adjust number of classes after unlearning
+    #num_classes = num_classes - 1  # Adjust number of classes after unlearning
 
-    retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=train_dataset,
-        unlearn_class=0
+    # Split using indices and lazy-loading
+    # Note: unlearn_class=0 means class 0 is removed, and 1-9 become 0-8
+    retain_train_dataset, unlearn_train_dataset = dataset.split_unlearn_dataset(
+        dataset=train_dataset,
+        unlearn_class=10
     )
 
-    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=test_dataset,
-        unlearn_class=0
+    retain_test_dataset, unlearn_test_dataset = dataset.split_unlearn_dataset(
+        dataset=test_dataset,
+        unlearn_class=10
     )
 
-    train_loader = DataLoader(retain_dataset, batch_size= args.batch_size, shuffle= True)
-    test_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle= True)
+    train_loader = DataLoader(retain_train_dataset, batch_size= args.batch_size, shuffle= True)
+    test_loader = DataLoader(retain_test_dataset, batch_size=args.batch_size, shuffle= True)
 
     # Model preparation
     model = getattr(models, args.model)(

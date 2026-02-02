@@ -3,7 +3,7 @@ from typing import Tuple, List
 from torch.utils.data import ConcatDataset, random_split
 from tqdm import tqdm
 from src import raw_dataset
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 
 
 def get_dataset(
@@ -38,24 +38,38 @@ def dataset_info(
 
     return num_classes, num_channels
 
+class LabelMapperSubset(Dataset):
+    """Wraps a subset to shift labels so they remain contiguous (0 to N-2)."""
+    def __init__(self, subset, unlearn_class):
+        self.subset = subset
+        self.unlearn_class = unlearn_class
 
-def split_unlearn_dataset(
-    data_list: List[Tuple],
-    unlearn_class: int
-) -> Tuple[List, List]:
+    def __getitem__(self, index):
+        x, y = self.subset[index]
+        # If the label is higher than the removed class, shift it down
+        if y > self.unlearn_class:
+            y = y - 1
+        return x, y
 
-    retain_ds = []
-    unlearn_ds = []
-    for x, y in tqdm(data_list, desc= f"Preparing dataset"):
-        if y == unlearn_class:
-            unlearn_ds.append([x,y])
-        else:
-            #retain_ds.append([x,y])
-            if y < unlearn_class:
-                retain_ds.append([x,y])
-            else:
-                y = y - 1
-                retain_ds.append([x,y])
+    def __len__(self):
+        return len(self.subset)
+
+def split_unlearn_dataset(dataset, unlearn_class):
+    # 1. Convert targets to a tensor for fast filtering
+    # Works for CIFAR and most torchvision datasets
+    targets = torch.tensor(dataset.targets)
+    
+    # 2. Find indices
+    retain_indices = (targets != unlearn_class).nonzero(as_tuple=True)[0].tolist()
+    unlearn_indices = (targets == unlearn_class).nonzero(as_tuple=True)[0].tolist()
+    
+    # 3. Create Subsets (this does NOT copy the images, only the indices)
+    retain_ds = Subset(dataset, retain_indices)
+    unlearn_ds = Subset(dataset, unlearn_indices)
+    
+    # 4. Wrap retain_ds to handle the y = y - 1 logic
+    retain_ds = LabelMapperSubset(retain_ds, unlearn_class)
+    
     return retain_ds, unlearn_ds
 
 
