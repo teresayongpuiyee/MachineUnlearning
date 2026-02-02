@@ -73,21 +73,22 @@ class Cifar10(CIFAR10):
         augment: bool = True,
         img_size: int = 32
     ):
+        # Use list() to create a NEW copy of the global list
         if train:
             if augment:
-                transform = transform_train_augment
+                transform_list = list(transform_train_augment)
             else:
-                transform = transform_test
+                transform_list = list(transform_test)
         else:
-            transform = transform_test
-        transform.append(transforms.Resize(img_size))
-        transform = transforms.Compose(transform)
+            transform_list = list(transform_test)
+        transform_list.append(transforms.Resize(img_size))
+        transform = transforms.Compose(transform_list)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
 
     def __getitem__(self, index):
-        x, y = super().__getitem__(index)
-        return x, y
+        # super().__getitem__ handles transforms automatically
+        return super().__getitem__(index)
 
 
 class Cifar100(CIFAR100):
