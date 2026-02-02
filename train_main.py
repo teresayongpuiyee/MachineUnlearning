@@ -118,7 +118,7 @@ if __name__ == "__main__":
         dataset_name= args.dataset, root= args.root
     )
 
-    #num_classes = num_classes - 1  # Adjust number of classes after unlearning
+    num_classes = num_classes - 1  # Adjust number of classes after unlearning
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
         data_list=train_dataset,
