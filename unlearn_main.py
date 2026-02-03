@@ -110,13 +110,13 @@ def main(args) -> None:
         new_num_classes = num_classes
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=train_dataset,
+        dataset=train_dataset,
         unlearn_class=args.unlearn_class,
         shift_labels=args.shift_labels
     )
 
     test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=test_dataset,
+        dataset=test_dataset,
         unlearn_class=args.unlearn_class,
         shift_labels=args.shift_labels
     )
