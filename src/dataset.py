@@ -68,7 +68,7 @@ def split_unlearn_dataset(dataset, unlearn_class):
     unlearn_ds = Subset(dataset, unlearn_indices)
     
     # 4. Wrap retain_ds to handle the y = y - 1 logic
-    retain_ds = LabelMapperSubset(retain_ds, unlearn_class)
+    #retain_ds = LabelMapperSubset(retain_ds, unlearn_class)
     
     return retain_ds, unlearn_ds
 

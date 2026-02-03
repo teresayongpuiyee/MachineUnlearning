@@ -124,12 +124,12 @@ if __name__ == "__main__":
     # Note: unlearn_class=0 means class 0 is removed, and 1-9 become 0-8
     retain_train_dataset, unlearn_train_dataset = dataset.split_unlearn_dataset(
         dataset=train_dataset,
-        unlearn_class=10
+        unlearn_class=0
     )
 
     retain_test_dataset, unlearn_test_dataset = dataset.split_unlearn_dataset(
         dataset=test_dataset,
-        unlearn_class=10
+        unlearn_class=0
     )
 
     train_loader = DataLoader(retain_train_dataset, batch_size= args.batch_size, shuffle= True)
