@@ -46,7 +46,6 @@ parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
 parser.add_argument("-model_path", type= str,
                     help= "Trained model path")
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
-parser.add_argument("-shift_labels", dest="shift_labels", action="store_true", default= False, help= "Shift labels for retraining")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -99,26 +98,14 @@ def main(args) -> None:
         dataset_name=args.dataset, root=args.root
     )
 
-    if args.unlearn_method == "retrain":
-        if args.shift_labels:
-            logger.info("Shift labels for retraining, reducing num_classes by 1")
-            new_num_classes = num_classes - 1
-        else:
-            new_num_classes = num_classes
-    else:
-        args.shift_labels = False
-        new_num_classes = num_classes
-
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
         dataset=train_dataset,
-        unlearn_class=args.unlearn_class,
-        shift_labels=args.shift_labels
+        unlearn_class=args.unlearn_class
     )
 
     test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
         dataset=test_dataset,
-        unlearn_class=args.unlearn_class,
-        shift_labels=args.shift_labels
+        unlearn_class=args.unlearn_class
     )
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
@@ -130,9 +117,9 @@ def main(args) -> None:
 
     # Model preparation
     model = getattr(models, args.model)(
-        num_classes=new_num_classes, input_channels=num_channels).to(device)
+        num_classes=num_classes, input_channels=num_channels).to(device)
     unlearning_teacher = getattr(models, args.model)(
-        num_classes=new_num_classes, input_channels=num_channels).to(device)
+        num_classes=num_classes, input_channels=num_channels).to(device)
 
     if args.unlearn_method != "retrain":
         # Load trained model to unlearn
@@ -153,7 +140,7 @@ def main(args) -> None:
         test_loader=test_loader,
         test_retain_loader=test_retain_loader,
         num_channels=num_channels,
-        num_classes=new_num_classes,
+        num_classes=num_classes,
         device=device
     )
     end_time = time.time()
