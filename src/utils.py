@@ -136,7 +136,10 @@ def load_pretrained_weights(
     if len(pretrained_weight):
         logger.info(f"Use pretrained model from {pretrained_weight}")
         checkpoint = torch.load(pretrained_weight, map_location=device)
-        state_dict = checkpoint['model_state_dict']
+        if 'model_state_dict' in checkpoint:
+            state_dict = checkpoint['model_state_dict']
+        else:
+            state_dict = checkpoint
 
         keys_to_remove = ['fc.weight', 'fc.bias'] 
         for key in keys_to_remove:
@@ -175,3 +178,15 @@ def load_checkpoint_and_resume(
     best_test_loss = checkpoint['best_val_loss']
     
     return start_epoch, patience_counter, best_metrics, best_test_acc, best_test_loss
+
+def load_model_weights(
+    model: torch.nn.Module,
+    model_path: str,
+    device: torch.device,
+) -> None:
+    checkpoint = torch.load(model_path, map_location=device)
+
+    if 'model_state_dict' in checkpoint:
+        model.load_state_dict(checkpoint['model_state_dict'])
+    else:
+        model.load_state_dict(checkpoint)
