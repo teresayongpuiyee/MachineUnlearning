@@ -1,9 +1,7 @@
-from src import utils, dataset
+from src import utils, dataset, analyse
 import argparse
 from model import models
 from torch.utils.data import DataLoader
-import torch
-import torch.nn.functional as F
 import yaml
 
 parser = argparse.ArgumentParser()
@@ -19,60 +17,34 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "TinyImagenet"])
 # Model
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
-
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, default=0, help= "Class to unlearn")
-
-parser.add_argument("-model_a", type=str, required=True, help="Path to model A (original)")
-parser.add_argument("-model_b", type=str, required=True, help="Path to model B (e.g. retrained)")
-parser.add_argument("-model_c", type=str, required=True, help="Path to model C (e.g. unlearned)")
-
+parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
-
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
 args = parser.parse_args()
 
-@torch.no_grad()
-def extract_mean_representation(model, dataloader, device):
-    model.eval()
-    reps = []
-
-    for x, _ in dataloader:
-        x = x.to(device)
-        h = model.feature_extractor(x)   
-        h = h.view(h.size(0), -1)  # (N, D)
-        reps.append(h)
-
-    reps = torch.cat(reps, dim=0)        # (total_N, D)
-    mean_rep = reps.mean(dim=0)           # (D,)
-    return mean_rep
-
-def calculate_cos_sim(model_a, model_b, model_c, dataloader, device):
-    # extract mean representations - train loader
-    mean_a = extract_mean_representation(model_a, dataloader, device)
-    mean_b = extract_mean_representation(model_b, dataloader, device)
-    mean_c = extract_mean_representation(model_c, dataloader, device)
-
-    # compute representation differences
-    diff_ab = mean_a - mean_b
-    diff_ac = mean_a - mean_c
-
-    # cosine similarity
-    cos_sim = F.cosine_similarity(diff_ab.unsqueeze(0), diff_ac.unsqueeze(0)).item()
-
-    return cos_sim
 
 def main(args) -> None:
-    exp_name = args.model_a.split("/")[-3]
+    unlearned_model_path_list = args.unlearned_model.split("/")
+    
+    exp_name = unlearned_model_path_list[-3]
+    unlearn_method = unlearned_model_path_list[-1].split(".")[0]
+    model_path = "/".join(unlearned_model_path_list[:-1])
+    ori_model_path = f"{model_path}/baseline.pt"
+    retrain_model_path = f"{model_path}/retrain.pt"
+
+    utils.create_directory_if_not_exists(f"./{exp_name}/geo_analysis/")
+    
     config_dict = vars(args).copy()
 
-    logger = utils.configure_logger(f"./{exp_name}/unlearn_dir_align.log")
+    logger = utils.configure_logger(f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}.log")
 
-    OUTPUT_CONFIG_FILE = f"./{exp_name}/unlearn_dir_align_config.yaml"
-    OUTPUT_METRICS_FILE = f"./{exp_name}/unlearn_dir_align_metrics.yaml"
+    OUTPUT_CONFIG_FILE = f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}_config.yaml"
+    OUTPUT_METRICS_FILE = f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}_metrics.yaml"
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
@@ -82,48 +54,51 @@ def main(args) -> None:
     # Device
     device, device_name = utils.device_configuration(args=args)
 
+    logger.info("Preparing datasets and dataloaders...")
     # Dataset
-    train_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
+    train_dataset, _, num_classes, num_channels = dataset.get_dataset(
         dataset_name=args.dataset, root=args.root
     )
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=train_dataset,
-        unlearn_class=args.unlearn_class
-    )
-
-    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
-        data_list=test_dataset,
+        dataset=train_dataset,
         unlearn_class=args.unlearn_class
     )
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
-    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=True)
-    test_unlearn_loader = DataLoader(test_unlearn_dataset, batch_size=args.batch_size, shuffle=True)
 
+    logger.info("Loading model checkpoints...")
     # Model preparation
-    model_a = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-    model_b = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-    model_c = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+    ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+    retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+    unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
 
     # load checkpoints
-    model_a.load_state_dict(torch.load(args.model_a, map_location=device))
-    model_b.load_state_dict(torch.load(args.model_b, map_location=device))
-    model_c.load_state_dict(torch.load(args.model_c, map_location=device))
-
-    cos_sim_train = calculate_cos_sim(model_a, model_b, model_c, train_loader, device)
-    cos_sim_retain = calculate_cos_sim(model_a, model_b, model_c, retain_loader, device)
-    cos_sim_unlearn = calculate_cos_sim(model_a, model_b, model_c, unlearn_loader, device)
-
+    utils.load_model_weights(ori_model, ori_model_path, device)
+    utils.load_model_weights(retrain_model, retrain_model_path, device)
+    utils.load_model_weights(unlearned_model, args.unlearned_model, device)
+    
+    # cosine similarity
+    logger.info("Computing representation shift alignment metrics...")
+    cos_sim_train, mag_ratio_train = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, train_loader, device)
+    cos_sim_retain, mag_ratio_retain = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, retain_loader, device)
+    cos_sim_unlearn, mag_ratio_unlearn = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, unlearn_loader, device)
+    cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
+    
+    dir_align = {
+        "train": {"cosine_similarity": cos_sim_train, "magnitude_ratio": mag_ratio_train},
+        "retain": {"cosine_similarity": cos_sim_retain, "magnitude_ratio": mag_ratio_retain},
+        "unlearn": {"cosine_similarity": cos_sim_unlearn, "magnitude_ratio": mag_ratio_unlearn},
+        "harmonic_mean_retain_unlearn": cos_sim_h_mean
+    }
+    
     metrics_dict = {
-        "Cosine similarity train samples shift": cos_sim_train,
-        "Cosine similarity retain samples shift": cos_sim_retain,
-        "Cosine similarity forget samples shift": cos_sim_unlearn,
+        "Directional Alignment": dir_align,
     }
 
+    logger.info("Saving computed metrics...")
     with open(OUTPUT_METRICS_FILE, 'w') as f:
         yaml.safe_dump(metrics_dict, f, default_flow_style=False, sort_keys=False)
 
