@@ -27,6 +27,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-pretrained_weight", type= str, default= "", help= "Pretrained model path")
+parser.add_argument("-resume", dest="resume", action="store_true", default=False, help="Resume training from checkpoint")
 
 # Training hyperparameter
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
