@@ -78,7 +78,7 @@ def flatten_dict(d, prefix=''):
 
 if __name__ == "__main__":
 
-    if os.path.exists(f"./{args.exp_name}"):
+    if os.path.exists(f"./{args.exp_name}") and not args.resume:
         args.exp_name = args.exp_name + "_" + timestamp
 
     utils.create_directory_if_not_exists(f"./{args.exp_name}/")
@@ -162,11 +162,27 @@ if __name__ == "__main__":
     )
 
     loss_func = nn.CrossEntropyLoss().to(device)
-    best_test_loss = float('inf')
-    best_test_acc = -float('inf')
-    best_train_acc = -float('inf')
-    patience_counter = 0
-    start_epoch = 1
+
+    if args.resume:
+        (
+            start_epoch, 
+            patience_counter, 
+            best_metrics, 
+            best_test_acc, 
+            best_test_loss
+        ) = utils.load_checkpoint_and_resume(
+            model, 
+            optimizer, 
+            lr_scheduler,
+            f"{args.model_root}/baseline.pt",
+            device
+        )
+    else:
+        best_test_loss = float('inf')
+        best_test_acc = -float('inf')
+        best_metrics = dict()
+        patience_counter = 0
+        start_epoch = 1
 
     for epoch in tqdm(range(start_epoch, args.epochs + 1)):
         loss_list = []
@@ -213,12 +229,6 @@ if __name__ == "__main__":
             })
             wandb.log(metrics_dict)
 
-        if test_acc > best_test_acc:
-            best_test_acc = test_acc
-            best_train_acc = train_acc
-            best_model = copy.deepcopy(model)
-            best_metrics = metrics_dict
-
         if args.early_stop:
             if test_loss < best_test_loss:
                 best_test_loss = test_loss
@@ -226,15 +236,27 @@ if __name__ == "__main__":
             else:
                 patience_counter += 1
 
+        if test_acc > best_test_acc:
+            best_test_acc = test_acc
+            best_metrics = metrics_dict
+
+            utils.save_model(
+                checkpoint={
+                    'model_state_dict': model.state_dict(),
+                    'optimizer_state_dict': optimizer.state_dict(),
+                    'scheduler_state_dict': lr_scheduler.state_dict() if lr_scheduler is not None else None,
+                    'best_val_acc_metric': best_metrics,
+                    'best_val_loss': best_test_loss,
+                    'patience_counter': patience_counter
+                },
+                model_name="baseline",
+                model_root=args.model_root,
+            )
+
+        if args.early_stop:
             if patience_counter >= args.patience:
                 logger.info(f"Early stopping at epoch {epoch}")
                 break
-
-    utils.save_model(
-        model=best_model,
-        model_name="baseline",
-        model_root=args.model_root,
-    )
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:
         yaml.dump(best_metrics, f, default_flow_style=False)

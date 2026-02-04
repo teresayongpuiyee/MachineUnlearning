@@ -86,14 +86,14 @@ def create_directory_if_not_exists(
 
 
 def save_model(
-    model: torch.nn.Module,
+    checkpoint: dict,
     model_name: str,
     model_root: str,
 ) -> None:
     create_directory_if_not_exists(f"{model_root}/")
     model_path = f"{model_root}/{model_name}.pt"
     #model_path = f"{model_folder}{model_name}.pt"
-    torch.save(model.state_dict(), model_path)
+    torch.save(checkpoint, model_path)
 
 
 def get_csv_attr(
@@ -135,7 +135,8 @@ def load_pretrained_weights(
 ) -> torch.nn.Module:
     if len(pretrained_weight):
         logger.info(f"Use pretrained model from {pretrained_weight}")
-        state_dict = torch.load(pretrained_weight, map_location=device)
+        checkpoint = torch.load(pretrained_weight, map_location=device)
+        state_dict = checkpoint['model_state_dict']
 
         keys_to_remove = ['fc.weight', 'fc.bias'] 
         for key in keys_to_remove:
@@ -151,3 +152,26 @@ def load_pretrained_weights(
         logger.info("No pretrained model path provided, training from scratch.")
     
     return model
+
+def load_checkpoint_and_resume(
+    model: torch.nn.Module,
+    optimizer: torch.optim.Optimizer,
+    lr_scheduler: object,
+    checkpoint_path: str,
+    device: torch.device,
+) -> Tuple[int, int, dict, float, float]:
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    
+    model.load_state_dict(checkpoint['model_state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+    
+    if lr_scheduler is not None:
+        lr_scheduler.load_state_dict(checkpoint['scheduler_state_dict'])
+    
+    start_epoch = checkpoint['best_val_acc_metric']['epoch'] + 1  # Resume from the next epoch
+    patience_counter = checkpoint['patience_counter']
+    best_metrics = checkpoint['best_val_acc_metric']
+    best_test_acc = checkpoint['best_val_acc_metric']['val/accuracy']
+    best_test_loss = checkpoint['best_val_loss']
+    
+    return start_epoch, patience_counter, best_metrics, best_test_acc, best_test_loss

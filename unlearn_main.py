@@ -123,7 +123,8 @@ def main(args) -> None:
 
     if args.unlearn_method != "retrain":
         # Load trained model to unlearn
-        model.load_state_dict(torch.load(args.model_path))
+        checkpoint = torch.load(args.model_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
 
     start_time = time.time()
     logger.info("Starting unlearning process...")
@@ -149,7 +150,7 @@ def main(args) -> None:
 
     if args.save_model:
         utils.save_model(
-            model=unlearned_model,
+            checkpoint={'model_state_dict': unlearned_model.state_dict()},
             model_name=args.unlearn_method,
             model_root=args.model_root,
         )
