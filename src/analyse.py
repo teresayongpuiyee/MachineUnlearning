@@ -43,11 +43,11 @@ def extract_mean_representation_from_three_models(ori_model, retrain_model, unle
 
     return mean_ori, mean_ret, mean_unl
 
-def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path):
+def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name):
     # Single pass over the data for mean representation extraction
     mean_ori, mean_retrain, mean_unlearn = extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device)
 
-    visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path)
+    visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
 
     # Compute shifts
     shift_retrain = mean_retrain - mean_ori
@@ -104,7 +104,7 @@ def calculate_harmonic_mean(sim_retain, sim_unlearn):
     return round(h_mean, 4)
 
 def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None, 
-                         unlearn_method="", output_path=None):
+                         unlearn_method="", output_path=None, dataset_name=""):
     """
     Visualize the mean representations and their shifts in 2D using PCA.
     
@@ -115,6 +115,7 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
         labels: Optional list of strings for labeling points (default: ["Original", "Retrain", "Unlearned"])
         title: Plot title
         output_path: Optional file path to save the plot (e.g., "rep_shift.png")
+        dataset_name: Name of the dataset for title purposes
     """
     # Stack embeddings
     reps = torch.stack([mean_ori, mean_retrain, mean_unlearn]).cpu().numpy()
@@ -144,7 +145,7 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
               reps_2d[2,0]-reps_2d[0,0], reps_2d[2,1]-reps_2d[0,1],
               color='red', width=0.005, head_width=0.05, length_includes_head=True, label='Original→Unlearned')
     
-    plt.title(f"Representation Shifts - {unlearn_method}")
+    plt.title(f"Representation Shifts - {unlearn_method} ({dataset_name} set)")
     plt.xlabel("PC 1")
     plt.ylabel("PC 2")
     plt.grid(True)
@@ -152,6 +153,6 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
     
     # Save if path provided
     if output_path is not None:
-        save_path = f"{output_path}rep_shift_{unlearn_method}.png"
+        save_path = f"{output_path}rep_shift_{unlearn_method}_{dataset_name}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
