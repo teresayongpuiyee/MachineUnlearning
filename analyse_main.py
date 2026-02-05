@@ -84,11 +84,41 @@ def main(args) -> None:
     # cosine similarity
     logger.info("Computing representation shift alignment metrics...")
     logger.info("On training set...")
-    breakdown_train, cos_sim_train, mag_ratio_train = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, train_loader, device, unlearn_method, output_path)
+    breakdown_train, cos_sim_train, mag_ratio_train = analyse.compute_rep_shift_alignment(
+        ori_model, 
+        retrain_model, 
+        unlearned_model, 
+        train_loader, 
+        device, 
+        unlearn_method, 
+        output_path,
+        dataset_name="train"
+    )
+
     logger.info("On retain set...")
-    breakdown_retain, cos_sim_retain, mag_ratio_retain = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, retain_loader, device, unlearn_method, output_path)
+    breakdown_retain, cos_sim_retain, mag_ratio_retain = analyse.compute_rep_shift_alignment(
+        ori_model, 
+        retrain_model, 
+        unlearned_model, 
+        retain_loader, 
+        device, 
+        unlearn_method, 
+        output_path,
+        dataset_name="retain"
+    )
+
     logger.info("On forget set...")
-    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, unlearn_loader, device, unlearn_method, output_path)
+    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn = analyse.compute_rep_shift_alignment(
+        ori_model, 
+        retrain_model, 
+        unlearned_model, 
+        unlearn_loader, 
+        device, 
+        unlearn_method, 
+        output_path,
+        dataset_name="unlearn"
+    )
+    
     logger.info("Calculating harmonic mean of cosine similarities between retain and unlearn sets...")
     cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
     
