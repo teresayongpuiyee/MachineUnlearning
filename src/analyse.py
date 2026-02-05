@@ -72,16 +72,16 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
     mag_unlearn_ratio = mag_unlearn / (mag_ori + 1e-9)
 
     breakdown_metrics = {
-        "retrain_cos_sim": retrain_cos_sim,
-        "unlearn_cos_sim": unlearn_cos_sim,
-        "mag_retrain": mag_retrain,
-        "mag_unlearn": mag_unlearn,
-        "mag_ori": mag_ori,
-        "mag_retrain_ratio": mag_retrain_ratio,
-        "mag_unlearn_ratio": mag_unlearn_ratio
+        "retrain_cos_sim": round(retrain_cos_sim, 4),
+        "unlearn_cos_sim": round(unlearn_cos_sim, 4),
+        "mag_retrain": round(mag_retrain, 4),
+        "mag_unlearn": round(mag_unlearn, 4),
+        "mag_ori": round(mag_ori, 4),
+        "mag_retrain_ratio": round(mag_retrain_ratio, 4),
+        "mag_unlearn_ratio": round(mag_unlearn_ratio, 4)
     }
 
-    return breakdown_metrics, shift_cos_sim, mag_shift_ratio
+    return breakdown_metrics, round(shift_cos_sim, 4), round(mag_shift_ratio, 4)
 
 def calculate_harmonic_mean(sim_retain, sim_unlearn):
     """
@@ -99,7 +99,7 @@ def calculate_harmonic_mean(sim_retain, sim_unlearn):
     
     # Standard harmonic mean formula
     h_mean = (2 * a * b) / (a + b)
-    return h_mean
+    return round(h_mean, 4)
 
 def plot_representation_shifts(mean_ori, mean_retrain, mean_unlearn, title="Feature Space Shift"):
     # Stack means into a single matrix for PCA: (3, D)
