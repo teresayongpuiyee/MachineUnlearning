@@ -1,50 +1,87 @@
 import torch
 import torch.nn.functional as F
+from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 @torch.no_grad()
-def extract_mean_representation(model, dataloader, device):
-    model.eval()
-    total_sum = None
+def extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device):
+    ori_model.eval()
+    retrain_model.eval()
+    unlearned_model.eval()
+    
+    sum_ori, sum_retrain, sum_unlearn = None, None, None
     total_count = 0
 
-    for x, _ in dataloader:
+    for x, _ in tqdm(dataloader):
         x = x.to(device)
-        h = model.feature_extractor(x)   
-        h = h.view(h.size(0), -1)  # (N, D)
+        total_count += x.size(0)
 
-        if total_sum is None:
-            total_sum = torch.zeros(h.size(1), device=device)
+        # Extract features for all three models
+        h_ori = ori_model.feature_extractor(x).view(x.size(0), -1)
+        h_ret = retrain_model.feature_extractor(x).view(x.size(0), -1)
+        h_unl = unlearned_model.feature_extractor(x).view(x.size(0), -1)
+
+        if sum_ori is None:
+            sum_ori = torch.zeros(h_ori.size(1), device=device)
+
+        if sum_retrain is None:
+            sum_retrain = torch.zeros(h_ret.size(1), device=device)
+
+        if sum_unlearn is None:
+            sum_unlearn = torch.zeros(h_unl.size(1), device=device)
         
-        total_sum += h.sum(dim=0)
-        total_count += h.size(0)
+        # Accumulate sums
+        sum_ori += h_ori.sum(dim=0)
+        sum_retrain += h_ret.sum(dim=0)
+        sum_unlearn += h_unl.sum(dim=0)
 
-    return total_sum / total_count   # (D,)
+    # Calculate means
+    mean_ori = (sum_ori / total_count)
+    mean_ret = (sum_retrain / total_count)
+    mean_unl = (sum_unlearn / total_count)
 
-def get_shift_metrics(model_ori, model_target, dataloader, device):
-    """Computes the vector difference and its magnitude."""
-    mean_ori = extract_mean_representation(model_ori, dataloader, device)
-    mean_target = extract_mean_representation(model_target, dataloader, device)
-
-    # compute representation differences
-    shift_vector = mean_target - mean_ori
-    magnitude = torch.norm(shift_vector, p=2).item()
-    
-    return shift_vector, magnitude
+    return mean_ori, mean_ret, mean_unl
 
 def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device):
-    # Get shifts relative to the original model
-    shift_retrain, mag_retrain = get_shift_metrics(ori_model, retrain_model, dataloader, device)
-    shift_unlearn, mag_unlearn = get_shift_metrics(ori_model, unlearned_model, dataloader, device)
+    # Single pass over the data for mean representation extraction
+    mean_ori, mean_retrain, mean_unlearn = extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device)
+
+    # Compute shifts
+    shift_retrain = mean_retrain - mean_ori
+    shift_unlearn = mean_unlearn - mean_ori
+    
+    # Compute magnitude
+    mag_shift_retrain = torch.norm(shift_retrain, p=2).item()
+    mag_shift_unlearn = torch.norm(shift_unlearn, p=2).item()
     
     # Directional alignment
     shift_cos_sim = F.cosine_similarity(shift_retrain.unsqueeze(0), shift_unlearn.unsqueeze(0)).item()
 
     # Relative magnitude (closer to 1.0 is better)
-    mag_ratio = mag_unlearn / (mag_retrain + 1e-9)
+    mag_shift_ratio = mag_shift_unlearn / (mag_shift_retrain + 1e-9)
 
-    return shift_cos_sim, mag_ratio
+    # Breakdown metrics
+    retrain_cos_sim = F.cosine_similarity(mean_retrain.unsqueeze(0), mean_ori.unsqueeze(0)).item()
+    unlearn_cos_sim = F.cosine_similarity(mean_unlearn.unsqueeze(0), mean_ori.unsqueeze(0)).item()
+    mag_retrain = torch.norm(mean_retrain, p=2).item()
+    mag_unlearn = torch.norm(mean_unlearn, p=2).item()
+    mag_ori = torch.norm(mean_ori, p=2).item()
+
+    mag_retrain_ratio = mag_retrain / (mag_ori + 1e-9)
+    mag_unlearn_ratio = mag_unlearn / (mag_ori + 1e-9)
+
+    breakdown_metrics = {
+        "retrain_cos_sim": retrain_cos_sim,
+        "unlearn_cos_sim": unlearn_cos_sim,
+        "mag_retrain": mag_retrain,
+        "mag_unlearn": mag_unlearn,
+        "mag_ori": mag_ori,
+        "mag_retrain_ratio": mag_retrain_ratio,
+        "mag_unlearn_ratio": mag_unlearn_ratio
+    }
+
+    return breakdown_metrics, shift_cos_sim, mag_shift_ratio
 
 def calculate_harmonic_mean(sim_retain, sim_unlearn):
     """
