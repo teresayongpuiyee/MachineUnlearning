@@ -37,14 +37,15 @@ def main(args) -> None:
     ori_model_path = f"{model_path}/baseline.pt"
     retrain_model_path = f"{model_path}/retrain.pt"
 
-    utils.create_directory_if_not_exists(f"./{exp_name}/geo_analysis/")
+    output_path = f"./{exp_name}/geo_analysis/"
+    utils.create_directory_if_not_exists(output_path)
     
     config_dict = vars(args).copy()
 
-    logger = utils.configure_logger(f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}.log")
+    logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
 
-    OUTPUT_CONFIG_FILE = f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}_config.yaml"
-    OUTPUT_METRICS_FILE = f"./{exp_name}/geo_analysis/unlearn_{unlearn_method}_metrics.yaml"
+    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_metrics.yaml"
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
@@ -83,11 +84,11 @@ def main(args) -> None:
     # cosine similarity
     logger.info("Computing representation shift alignment metrics...")
     logger.info("On training set...")
-    breakdown_train, cos_sim_train, mag_ratio_train = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, train_loader, device)
+    breakdown_train, cos_sim_train, mag_ratio_train = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, train_loader, device, unlearn_method, output_path)
     logger.info("On retain set...")
-    breakdown_retain, cos_sim_retain, mag_ratio_retain = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, retain_loader, device)
+    breakdown_retain, cos_sim_retain, mag_ratio_retain = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, retain_loader, device, unlearn_method, output_path)
     logger.info("On forget set...")
-    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, unlearn_loader, device)
+    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn = analyse.compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, unlearn_loader, device, unlearn_method, output_path)
     logger.info("Calculating harmonic mean of cosine similarities between retain and unlearn sets...")
     cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
     
