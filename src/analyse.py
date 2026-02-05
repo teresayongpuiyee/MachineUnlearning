@@ -43,9 +43,11 @@ def extract_mean_representation_from_three_models(ori_model, retrain_model, unle
 
     return mean_ori, mean_ret, mean_unl
 
-def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device):
+def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path):
     # Single pass over the data for mean representation extraction
     mean_ori, mean_retrain, mean_unlearn = extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device)
+
+    visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path)
 
     # Compute shifts
     shift_retrain = mean_retrain - mean_ori
@@ -101,36 +103,55 @@ def calculate_harmonic_mean(sim_retain, sim_unlearn):
     h_mean = (2 * a * b) / (a + b)
     return round(h_mean, 4)
 
-def plot_representation_shifts(mean_ori, mean_retrain, mean_unlearn, title="Feature Space Shift"):
-    # Stack means into a single matrix for PCA: (3, D)
-    combined = torch.stack([mean_ori, mean_retrain, mean_unlearn]).cpu().numpy()
+def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None, 
+                         unlearn_method="", output_path=None):
+    """
+    Visualize the mean representations and their shifts in 2D using PCA.
     
-    # Project to 2D
+    Args:
+        mean_ori: Tensor, mean representation from original model (D,)
+        mean_retrain: Tensor, mean representation from retrain model (D,)
+        mean_unlearn: Tensor, mean representation from unlearned model (D,)
+        labels: Optional list of strings for labeling points (default: ["Original", "Retrain", "Unlearned"])
+        title: Plot title
+        output_path: Optional file path to save the plot (e.g., "rep_shift.png")
+    """
+    # Stack embeddings
+    reps = torch.stack([mean_ori, mean_retrain, mean_unlearn]).cpu().numpy()
+    
+    # Reduce to 2D with PCA
     pca = PCA(n_components=2)
-    coords = pca.fit_transform(combined)
+    reps_2d = pca.fit_transform(reps)
     
-    plt.figure(figsize=(8, 6))
-    labels = ['Original', 'Retrained', 'Unlearned']
-    colors = ['black', 'blue', 'red']
+    # Default labels
+    if labels is None:
+        labels = ["Original", "Retrain", "Unlearned"]
     
     # Plot points
-    for i in range(3):
-        plt.scatter(coords[i, 0], coords[i, 1], c=colors[i], label=labels[i], s=100, zorder=5)
+    plt.figure(figsize=(6,6))
+    plt.scatter(reps_2d[:,0], reps_2d[:,1], color=['blue', 'green', 'red'], s=100)
     
-    # Draw vectors (shifts) starting from Original
-    origin_x, origin_y = coords[0]
+    # Annotate points
+    for i, label in enumerate(labels):
+        plt.text(reps_2d[i,0]+0.02, reps_2d[i,1]+0.02, label, fontsize=12)
     
-    # Vector to Retrained
-    plt.arrow(origin_x, origin_y, coords[1, 0] - origin_x, coords[1, 1] - origin_y, 
-              head_width=0.05, color='blue', alpha=0.3, label='Ideal Shift')
+    # Draw arrows for shifts
+    plt.arrow(reps_2d[0,0], reps_2d[0,1],
+              reps_2d[1,0]-reps_2d[0,0], reps_2d[1,1]-reps_2d[0,1],
+              color='green', width=0.005, head_width=0.05, length_includes_head=True, label='Original→Retrain')
     
-    # Vector to Unlearned
-    plt.arrow(origin_x, origin_y, coords[2, 0] - origin_x, coords[2, 1] - origin_y, 
-              head_width=0.05, color='red', alpha=0.3, label='Actual Shift')
-
-    plt.title(title)
-    plt.xlabel("PC1")
-    plt.ylabel("PC2")
-    plt.legend()
-    plt.grid(True, linestyle='--', alpha=0.6)
-    plt.show()
+    plt.arrow(reps_2d[0,0], reps_2d[0,1],
+              reps_2d[2,0]-reps_2d[0,0], reps_2d[2,1]-reps_2d[0,1],
+              color='red', width=0.005, head_width=0.05, length_includes_head=True, label='Original→Unlearned')
+    
+    plt.title(f"Representation Shifts - {unlearn_method}")
+    plt.xlabel("PC 1")
+    plt.ylabel("PC 2")
+    plt.grid(True)
+    plt.axis('equal')
+    
+    # Save if path provided
+    if output_path is not None:
+        save_path = f"{output_path}rep_shift_{unlearn_method}.png"
+        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        print(f"Plot saved to {save_path}")
