@@ -302,8 +302,8 @@ def sure_miars(
 
 def linear_probing(
     train_loader: DataLoader,
-    retain_loader: DataLoader,
-    forget_loader: DataLoader,
+    retain_eval_loader: DataLoader,
+    unlearn_eval_loader: DataLoader,
     model: torch.nn.Module,
     num_classes: int,
     epochs: int = 10,
@@ -316,8 +316,8 @@ def linear_probing(
     Reference: ESC - https://github.com/KU-VGI/ESC/blob/main/evaluation.py
     Args:
         train_loader: DataLoader for training the linear head
-        retain_loader: DataLoader for the retain (remaining) set
-        forget_loader: DataLoader for the forget set
+        retain_eval_loader: DataLoader for the retain (remaining) set
+        unlearn_eval_loader: DataLoader for the forget set
         model: Model to extract representations
         num_classes: Number of output classes
         epochs: Number of training epochs
@@ -376,8 +376,8 @@ def linear_probing(
                 total += y.size(0)
         return 100.0 * correct / total if total > 0 else 0.0
 
-    retain_acc = eval_accuracy(retain_loader)
-    forget_acc = eval_accuracy(forget_loader)
+    retain_acc = eval_accuracy(retain_eval_loader)
+    forget_acc = eval_accuracy(unlearn_eval_loader)
 
     return {
         "retain_accuracy": round(retain_acc, 4),

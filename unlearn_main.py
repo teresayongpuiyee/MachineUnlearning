@@ -3,7 +3,6 @@ import argparse
 from src import dataset, metrics, repr_metrics
 from model import models
 from torch.utils.data import DataLoader
-import torch
 from unlearn_strategies import strategies
 import time
 import yaml
@@ -96,8 +95,17 @@ def main(args) -> None:
         dataset_name=args.dataset, root=args.root
     )
 
+    train_eval_dataset, _, _, _ = dataset.get_dataset(
+        dataset_name=args.dataset, root=args.root, augment=False
+    )
+
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
         dataset=train_dataset,
+        unlearn_class=args.unlearn_class
+    )
+
+    retain_eval_dataset, unlearn_eval_dataset = dataset.split_unlearn_dataset(
+        dataset=train_eval_dataset,
         unlearn_class=args.unlearn_class
     )
 
@@ -108,9 +116,11 @@ def main(args) -> None:
 
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
-    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=True)
-    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=True)
+    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False)
+    retain_eval_loader = DataLoader(retain_eval_dataset, batch_size=args.batch_size, shuffle=False)
+    unlearn_eval_loader = DataLoader(unlearn_eval_dataset, batch_size=args.batch_size, shuffle=False)
 
     # Model preparation
     model = getattr(models, args.model)(
@@ -158,87 +168,25 @@ def main(args) -> None:
     # Evaluation after unlearning
     # Classification-level evaluation
     logger.info(f"Unlearned classification")
-    retain_acc = metrics.evaluate(val_loader=retain_loader, model=unlearned_model, device=device)['Acc']
+    retain_acc = metrics.evaluate(val_loader=retain_eval_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Retain acc: {retain_acc}")
-    unlearn_acc = metrics.evaluate(val_loader=unlearn_loader, model=unlearned_model, device=device)['Acc']
+    unlearn_acc = metrics.evaluate(val_loader=unlearn_eval_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Unlearn_acc: {unlearn_acc}")
-    # Bad Teacher MIA
-    badt_mia = metrics.badt_mia(
-        retain_loader=retain_loader,
-        forget_loader=unlearn_loader,
-        test_loader=test_loader,
-        model=unlearned_model)
-    logger.info(f"Bad T MIA: {badt_mia}")
-
-    # Representation-level evaluation
-    train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
-    test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
-    retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
-    forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
 
     logger.info(f"Unlearned representation")
-    # Bad Teacher equivalent Rep-MIA with balance and normalize features
-    badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
-        retain_reps=retain_reps,
-        forget_reps=forget_reps,
-        test_reps=test_reps,
-        retain_labels=retain_labels
-    )
-    logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
-
-    # POUR
-    pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
-        train_reps=train_reps,
-        test_reps=test_reps,
-        train_labels=train_labels,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class,
-    )
-    logger.info(f"POUR rMIA: {pour_rmia_asr}")
-
-    # SURE
-    sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
-        train_reps=train_reps,
-        test_reps=test_reps,
-        train_labels=train_labels,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class,
-    )
-    logger.info(f"SURE MIARS: {sure_miars_asr}")
-
     linear_probe_acc = repr_metrics.linear_probing(
         train_loader= train_loader,
-        retain_loader= retain_loader,
-        forget_loader= unlearn_loader,
+        retain_eval_loader= retain_eval_loader,
+        unlearn_eval_loader= unlearn_eval_loader,
         model= unlearned_model,
         num_classes= num_classes,
         lr= args.linear_probe_lr,
     )
     logger.info(f"Linear probing acc: {linear_probe_acc}")
-    
-    if args.tsne:
-        repr_metrics.visualize_tsne(
-            reps=train_reps,
-            all_labels=train_labels,
-            unlearn_method=args.unlearn_method,
-            exp_name=exp_name
-        )
-        logger.info("t-SNE visualization saved.")
 
     metrics_dict = {
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
-        "classification/badt_mia": float(badt_mia),
-        
-        # attack model metrics
-        "representation/badt_rep_mia": badt_rep_mia_metrics,
-        "representation/pour_rmia": pour_rmia_metrics,
-        "representation/sure_miars": sure_miars_metrics,
-        
-        # forget asr
-        "representation/badt_rep_mia_asr": badt_rep_mia_asr,
-        "representation/pour_rmia_asr": pour_rmia_asr,
-        "representation/sure_miars_asr": sure_miars_asr,
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
