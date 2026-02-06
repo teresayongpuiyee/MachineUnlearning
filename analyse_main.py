@@ -30,9 +30,9 @@ args = parser.parse_args()
 
 def main(args) -> None:
     unlearned_model_path_list = args.unlearned_model.split("/")
-    
     exp_name = unlearned_model_path_list[-3]
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
+    
     model_path = "/".join(unlearned_model_path_list[:-1])
     ori_model_path = f"{model_path}/baseline.pt"
     retrain_model_path = f"{model_path}/retrain.pt"
@@ -40,12 +40,11 @@ def main(args) -> None:
     output_path = f"./{exp_name}/geo_analysis/"
     utils.create_directory_if_not_exists(output_path)
     
-    config_dict = vars(args).copy()
-
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
-
     OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_config.yaml"
     OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_metrics.yaml"
+
+    config_dict = vars(args).copy()
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
@@ -53,12 +52,12 @@ def main(args) -> None:
     utils.set_seed(seed=args.seed)
 
     # Device
-    device, device_name = utils.device_configuration(args=args)
+    device, _ = utils.device_configuration(args=args)
 
-    logger.info("Preparing datasets and dataloaders...")
     # Dataset
+    logger.info("Preparing datasets and dataloaders...")
     train_dataset, _, num_classes, num_channels = dataset.get_dataset(
-        dataset_name=args.dataset, root=args.root
+        dataset_name=args.dataset, root=args.root, augment=False
     )
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
@@ -66,12 +65,12 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False)
+    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
 
-    logger.info("Loading model checkpoints...")
     # Model preparation
+    logger.info("Loading model checkpoints...")
     ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
