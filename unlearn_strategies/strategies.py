@@ -146,7 +146,6 @@ def bad_teacher(
 def scrub(
     logger,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
     **kwargs,
@@ -174,7 +173,7 @@ def scrub(
     sgda_momentum = 0.9
 
     # Deep copy avoid overwriting
-    model_t = copy.deepcopy(unlearning_teacher)
+    model_t = copy.deepcopy(model)
     model_s = copy.deepcopy(model)
 
     module_list = nn.ModuleList([])
