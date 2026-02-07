@@ -18,18 +18,8 @@ from src import metrics
 
 
 def baseline(
-    logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
-    unlearn_loader: DataLoader,
-    retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
-    device: torch.device
+    **kwargs,
 ) -> torch.nn.Module:
     return model
 
@@ -38,15 +28,10 @@ def retrain(
     logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
-    unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
     test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
-    device: torch.device
+    device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     # Retrain model from scratch without unlearn dataset
@@ -66,17 +51,11 @@ def retrain(
 
 def fine_tune(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
-    unlearn_loader: DataLoader,
     retain_loader: DataLoader,
     test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     # Fine tune model with retain dataset
@@ -95,18 +74,12 @@ def fine_tune(
 
 # Unrolling SGD: https://github.com/cleverhans-lab/unrolling-sgd
 def gradient_ascent(
-    logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
     test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     epochs = 5
@@ -137,17 +110,12 @@ def gradient_ascent(
 # Bad Teacher: https://github.com/vikram2000b/bad-teaching-unlearning
 def bad_teacher(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     student_model = deepcopy(model)
@@ -177,17 +145,11 @@ def bad_teacher(
 # SCRUB: https://github.com/meghdadk/SCRUB/tree/main
 def scrub(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
-    device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     # Parameters
@@ -287,17 +249,14 @@ def scrub(
 # Amnesiac Unlearning: https://github.com/lmgraves/AmnesiacML
 def amnesiac(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
     unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
     test_loader: DataLoader,
-    test_retain_loader: DataLoader,
     num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 )-> torch.nn.Module:
     
     unlearninglabels = list(range(num_classes))
@@ -329,18 +288,11 @@ def amnesiac(
 
 # Boundary Unlearning: https://github.com/TY-LEE-KR/Boundary-Unlearning-Code
 def boundary(
-    logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
-    retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
     num_channels: int,
-    device: torch.device
+    device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
     # Boundary Shrink
     # Hyperparameter
@@ -415,17 +367,12 @@ def boundary(
 # Neural Tangent Kernel: https://github.com/AdityaGolatkar/SelectiveForgetting
 def ntk(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
     num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
     
     def delta_w_utils(model_init, dataloader, name="complete"):
@@ -613,18 +560,12 @@ def ntk(
 
 # Fisher Forgertting: https://github.com/AdityaGolatkar/SelectiveForgetting
 def fisher(
-    logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
     unlearn_class: int,
-    unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
     num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
     
     def hessian(dataset, model):
@@ -698,17 +639,14 @@ def fisher(
 # Selective Impair and Repair: https://github.com/vikram2000b/Fast-Machine-Unlearning
 def unsir(
     logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
     unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
     num_classes: int,
     num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
     
     classwise_train = unlearn.get_classwise_ds(
@@ -776,18 +714,11 @@ def unsir(
 
 # Selective Synaptic Dampening: https://github.com/if-loops/selective-synaptic-dampening
 def ssd(
-    logger,
-    args: argparse.Namespace,
     model: torch.nn.Module,
-    unlearning_teacher: torch.nn.Module,
-    unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
-    test_loader: DataLoader,
-    test_retain_loader: DataLoader,
-    num_classes: int,
-    num_channels: int,
     device: torch.device,
+    **kwargs,
 ) -> torch.nn.Module:
 
     # Default parameters from repo
