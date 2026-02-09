@@ -55,7 +55,6 @@ parser.add_argument("-linear_probe_lr", type=float, default= 1e-4, help='Learnin
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
-parser.add_argument("-tsne", dest="tsne", action="store_true", default=False, help="Enable t-SNE visualization")
 
 args = parser.parse_args()
 
