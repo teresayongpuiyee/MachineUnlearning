@@ -22,7 +22,10 @@ def training_optimization(
     device: torch.device,
     desc: str,
     opt: str= "adam",
-    args: argparse.Namespace = None
+    args: argparse.Namespace = None,
+    lr: float = 1e-4,
+    momentum: float = 0.5,
+    weight_decay: float = 1e-4,
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -43,10 +46,6 @@ def training_optimization(
             device= device,
             logger= logger,
         )
-    else:
-        lr = 1e-4
-        momentum = 0.5
-        weight_decay = 1e-4
 
     if opt not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")

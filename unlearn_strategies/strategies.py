@@ -28,7 +28,7 @@ def retrain(
     logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
-    retain_loader: DataLoader,
+    retain_aug_loader: DataLoader,
     test_retain_loader: DataLoader,
     device: torch.device,
     **kwargs,
@@ -38,7 +38,7 @@ def retrain(
     retrain_model = utils.training_optimization(
         logger,
         model= model,
-        train_loader= retain_loader,
+        train_loader= retain_aug_loader,
         test_loader= test_retain_loader,
         epochs= 30,
         device= device,
@@ -52,7 +52,7 @@ def retrain(
 def fine_tune(
     logger,
     model: torch.nn.Module,
-    retain_loader: DataLoader,
+    retain_aug_loader: DataLoader,
     test_loader: DataLoader,
     device: torch.device,
     **kwargs,
@@ -62,7 +62,7 @@ def fine_tune(
     ft_model = utils.training_optimization(
         logger,
         model= model,
-        train_loader= retain_loader,
+        train_loader= retain_aug_loader,
         test_loader= test_loader,
         epochs= 5,
         device= device,
@@ -270,7 +270,7 @@ def amnesiac(
         unlearning_trainset.append((x, y))
 
     unlearning_train_set_dl = DataLoader(
-        unlearning_trainset, 128, pin_memory=True, shuffle=True
+        unlearning_trainset, 64, pin_memory=True, shuffle=True
     )
 
     unlearned_model = utils.training_optimization(
@@ -280,7 +280,10 @@ def amnesiac(
         test_loader= test_loader,
         epochs= 5,
         device= device,
-        desc= "Amnesiac unlearning")
+        desc= "Amnesiac unlearning",
+        lr = 0.001,
+        weight_decay= 0.0,
+    )
     
     return unlearned_model
 
@@ -642,6 +645,7 @@ def unsir(
     unlearn_class: int,
     unlearn_loader: DataLoader,
     retain_loader: DataLoader,
+    test_retain_loader: DataLoader,
     num_classes: int,
     num_channels: int,
     device: torch.device,
@@ -651,10 +655,10 @@ def unsir(
     classwise_train = unlearn.get_classwise_ds(
         ConcatDataset((retain_loader.dataset, unlearn_loader.dataset)), num_classes
     )
-    noise_batch_size = 32
-    retain_valid_dl = DataLoader(retain_loader.dataset, batch_size=noise_batch_size)
+    noise_batch_size = 256
+    retain_valid_dl = DataLoader(test_retain_loader.dataset, batch_size=noise_batch_size)
     # collect some samples from each class
-    num_samples = 500
+    num_samples = 1000
     retain_samples = []
     for i in range(num_classes):
         if i != unlearn_class:
@@ -664,7 +668,7 @@ def unsir(
     img_shape = next(iter(retain_loader.dataset))[0].shape[-1]
     noise = unlearn.UNSIR_noise(noise_batch_size, num_channels, img_shape, img_shape).to(device)
     noise = unlearn.UNSIR_noise_train(
-        logger, noise, model, forget_class_label, 25, noise_batch_size, device=device
+        logger, noise, model, forget_class_label, 40, noise_batch_size, device=device
     )
     noisy_loader = unlearn.UNSIR_create_noisy_loader(
         noise,
@@ -682,7 +686,9 @@ def unsir(
         test_loader= retain_valid_dl,
         opt= "adam",
         device=device,
-        desc= "UNSIR impair step"
+        desc= "UNSIR impair step",
+        lr = 0.02,
+        weight_decay= 0.0,
     )
     # repair step
     other_samples = []
@@ -695,9 +701,9 @@ def unsir(
         )
 
     heal_loader = torch.utils.data.DataLoader(
-        other_samples, batch_size=128, shuffle=True
+        other_samples, batch_size=256, shuffle=True
     )
-    _ = utils.training_optimization(
+    model = utils.training_optimization(
         logger,
         model= model, 
         epochs= 1,
@@ -705,7 +711,9 @@ def unsir(
         test_loader= retain_valid_dl,
         opt= "adam",
         device=device, 
-        desc= "UNSIR repair step"
+        desc= "UNSIR repair step",
+        lr = 0.01,
+        weight_decay= 0.0,
     )
 
     return model
@@ -715,7 +723,7 @@ def unsir(
 def ssd(
     model: torch.nn.Module,
     unlearn_loader: DataLoader,
-    retain_loader: DataLoader,
+    train_loader: DataLoader,
     device: torch.device,
     **kwargs,
 ) -> torch.nn.Module:
@@ -743,7 +751,7 @@ def ssd(
     sample_importances = pdr.calc_importance(unlearn_loader)
 
     # Calculate the importances of D (see paper); this can also be done at any point before forgetting.
-    original_importances = pdr.calc_importance(retain_loader)
+    original_importances = pdr.calc_importance(train_loader)
 
     # Dampen selected parameters
     pdr.modify_weight(original_importances, sample_importances)

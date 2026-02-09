@@ -138,7 +138,7 @@ def UNSIR_noise_train(
         loss.backward()
         opt.step()
         total_loss.append(loss.cpu().detach().numpy())
-        if epoch % 5 == 0:
+        if epoch % 8 == 0:
             logger.info("Loss: {}".format(np.mean(total_loss)))
 
     return noise
@@ -149,7 +149,7 @@ def UNSIR_create_noisy_loader(
     forget_class_label,
     retain_samples,
     batch_size,
-    num_noise_batches=80,
+    num_noise_batches=20,
     device="cuda",
 ):
     noisy_data = []

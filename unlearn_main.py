@@ -91,21 +91,21 @@ def main(args) -> None:
     logger.info(f"Unlearning scenario: {args.scenario} Dataset: {args.dataset} Unlearn method: {args.unlearn_method} Device: {device}")
 
     # Dataset
-    train_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
+    train_aug_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
         dataset_name=args.dataset, root=args.root
     )
 
-    train_eval_dataset, _, _, _ = dataset.get_dataset(
+    train_dataset, _, _, _ = dataset.get_dataset(
         dataset_name=args.dataset, root=args.root, augment=False
+    )
+
+    retain_aug_dataset, _ = dataset.split_unlearn_dataset(
+        dataset=train_aug_dataset,
+        unlearn_class=args.unlearn_class
     )
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
         dataset=train_dataset,
-        unlearn_class=args.unlearn_class
-    )
-
-    retain_eval_dataset, unlearn_eval_dataset = dataset.split_unlearn_dataset(
-        dataset=train_eval_dataset,
         unlearn_class=args.unlearn_class
     )
 
@@ -114,13 +114,17 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
+    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True)
+    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True)
+
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True)
+
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
     test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False)
-    retain_eval_loader = DataLoader(retain_eval_dataset, batch_size=args.batch_size, shuffle=False)
-    unlearn_eval_loader = DataLoader(unlearn_eval_dataset, batch_size=args.batch_size, shuffle=False)
+    retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False)
+    unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
 
     # Model preparation
     model = getattr(models, args.model)(
@@ -147,6 +151,8 @@ def main(args) -> None:
         unlearn_class= args.unlearn_class,
         unlearn_loader=unlearn_loader,
         retain_loader=retain_loader,
+        retain_aug_loader=retain_aug_loader,
+        train_loader=train_loader,
         test_loader=test_loader,
         test_retain_loader=test_retain_loader,
         num_channels=num_channels,
@@ -175,7 +181,7 @@ def main(args) -> None:
 
     logger.info(f"Unlearned representation")
     linear_probe_acc = repr_metrics.linear_probing(
-        train_loader= train_loader,
+        train_loader= train_aug_loader,
         retain_eval_loader= retain_eval_loader,
         unlearn_eval_loader= unlearn_eval_loader,
         model= unlearned_model,
