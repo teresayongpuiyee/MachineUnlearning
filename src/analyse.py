@@ -80,10 +80,18 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         "mag_unlearn": round(mag_unlearn, 4),
         "mag_ori": round(mag_ori, 4),
         "mag_retrain_ratio": round(mag_retrain_ratio, 4),
-        "mag_unlearn_ratio": round(mag_unlearn_ratio, 4)
+        "mag_unlearn_ratio": round(mag_unlearn_ratio, 4),
+        "mag_shift_retrain": round(mag_shift_retrain, 4),
+        "mag_shift_unlearn": round(mag_shift_unlearn, 4)
     }
 
-    return breakdown_metrics, round(shift_cos_sim, 4), round(mag_shift_ratio, 4)
+    mean_reps = {
+        "mean_ori": mean_ori,
+        "mean_retrain": mean_retrain,
+        "mean_unlearn": mean_unlearn
+    }
+
+    return breakdown_metrics, round(shift_cos_sim, 4), round(mag_shift_ratio, 4), mean_reps
 
 def calculate_harmonic_mean(sim_retain, sim_unlearn):
     """
@@ -102,6 +110,26 @@ def calculate_harmonic_mean(sim_retain, sim_unlearn):
     # Standard harmonic mean formula
     h_mean = (2 * a * b) / (a + b)
     return round(h_mean, 4)
+
+def compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn):
+    mean_ori_retain = mean_reps_retain["mean_ori"]
+    mean_retrain_retain = mean_reps_retain["mean_retrain"]
+    mean_unlearn_retain = mean_reps_retain["mean_unlearn"]
+
+    mean_ori_unlearn = mean_reps_unlearn["mean_ori"]
+    mean_retrain_unlearn = mean_reps_unlearn["mean_retrain"]
+    mean_unlearn_unlearn = mean_reps_unlearn["mean_unlearn"]
+
+    unlearn_retain_shift = mean_unlearn_retain - mean_ori_retain
+    unlearn_unlearn_shift = mean_unlearn_unlearn - mean_ori_unlearn
+
+    retrain_retain_shift = mean_retrain_retain - mean_ori_retain
+    retrain_unlearn_shift = mean_retrain_unlearn - mean_ori_unlearn
+
+    unlearn_ret_unl_cos_sim = F.cosine_similarity(unlearn_retain_shift.unsqueeze(0), unlearn_unlearn_shift.unsqueeze(0)).item()
+    retrain_ret_unl_cos_sim = F.cosine_similarity(retrain_retain_shift.unsqueeze(0), retrain_unlearn_shift.unsqueeze(0)).item()
+
+    return round(unlearn_ret_unl_cos_sim,4), round(retrain_ret_unl_cos_sim,4)
 
 def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None, 
                          unlearn_method="", output_path=None, dataset_name=""):
