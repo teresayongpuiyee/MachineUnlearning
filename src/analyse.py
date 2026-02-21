@@ -184,16 +184,20 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
 def project_representations(
     representations, ori_model, retrain_model, dataloader, device, projection=""
 ):
+    target_device = representations.device  # should be cpu
+
     model_dict = {
         "original": ori_model,
         "retrain": retrain_model,
     }
     mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
-    mean_ori = mean_reps_dict["original"]
-    mean_retrain = mean_reps_dict["retrain"]
+    
+    # Move mean reps to CPU to match representations
+    mean_ori = mean_reps_dict["original"].to(target_device)
+    mean_retrain = mean_reps_dict["retrain"].to(target_device)
 
+    # Compute shift direction
     shift_retrain = mean_retrain - mean_ori
-
     shift_retrain_norm = torch.norm(shift_retrain)
     
     direction = shift_retrain / (shift_retrain_norm + 1e-8)  # Avoid division by zero (D,)
