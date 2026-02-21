@@ -1,6 +1,6 @@
 from src import utils
 import argparse
-from src import dataset, metrics, repr_metrics
+from src import dataset, metrics, repr_metrics, analyse
 from model import models
 from torch.utils.data import DataLoader
 import yaml
@@ -21,6 +21,9 @@ parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selec
 parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
+parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
+                    choices=["orthogonal", "parallel", ""])
+
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
 # Set seed
@@ -34,7 +37,10 @@ def main(args) -> None:
     exp_name = unlearned_model_path_list[-3]
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
 
-    output_path = f"./{exp_name}/mia_cka_evaluate/"
+    if len(args.project_method) > 0:
+        output_path = f"./{exp_name}/mia_evaluate_{args.project_method}/"
+    else:
+        output_path = f"./{exp_name}/mia_cka_evaluate/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
@@ -150,12 +156,32 @@ def main(args) -> None:
     retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
     forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
 
+    if len(args.project_method) > 0:
+        model_dir = "/".join(args.unlearned_model.split("/")[:-1])
+
+        ori_model_path = model_dir + "/baseline.pt"
+        ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
+        
+        retrain_model_path = model_dir + "/retrain.pt"
+        retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
+
+        train_reps = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+        test_train_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+        test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        forget_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)        
+    else:
+        test_train_reps = test_reps
+        test_retain_reps = test_reps
+
     logger.info(f"Representation MIA evaluation...")
     # Bad Teacher equivalent Rep-MIA with balance and normalize features
     badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
         retain_reps=retain_reps,
         forget_reps=forget_reps,
-        test_reps=test_reps,
+        test_reps=test_retain_reps,
         retain_labels=retain_labels,
         test_labels=test_labels,
         unlearn_class=args.unlearn_class
@@ -174,7 +200,7 @@ def main(args) -> None:
     # POUR
     pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
         train_reps=train_reps,
-        test_reps=test_reps,
+        test_reps=test_train_reps,
         train_labels=train_labels,
         test_labels=test_labels,
         unlearn_class=args.unlearn_class,
@@ -184,7 +210,7 @@ def main(args) -> None:
     # SURE
     sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
         train_reps=train_reps,
-        test_reps=test_reps,
+        test_reps=test_train_reps,
         train_labels=train_labels,
         test_labels=test_labels,
         unlearn_class=args.unlearn_class,

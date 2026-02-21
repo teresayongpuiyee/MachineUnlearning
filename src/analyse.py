@@ -5,12 +5,13 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 @torch.no_grad()
-def extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device):
-    ori_model.eval()
-    retrain_model.eval()
-    unlearned_model.eval()
+def extract_mean_representation_from_n_models(model_dict, dataloader, device):
+    mean_dict = dict()
     
-    sum_ori, sum_retrain, sum_unlearn = None, None, None
+    for model_key, model in model_dict.items():
+        model.eval()
+        mean_dict[model_key] = None
+    
     total_count = 0
 
     for x, _ in tqdm(dataloader):
@@ -18,34 +19,29 @@ def extract_mean_representation_from_three_models(ori_model, retrain_model, unle
         total_count += x.size(0)
 
         # Extract features for all three models
-        h_ori = ori_model.feature_extractor(x).view(x.size(0), -1)
-        h_ret = retrain_model.feature_extractor(x).view(x.size(0), -1)
-        h_unl = unlearned_model.feature_extractor(x).view(x.size(0), -1)
-
-        if sum_ori is None:
-            sum_ori = torch.zeros(h_ori.size(1), device=device)
-
-        if sum_retrain is None:
-            sum_retrain = torch.zeros(h_ret.size(1), device=device)
-
-        if sum_unlearn is None:
-            sum_unlearn = torch.zeros(h_unl.size(1), device=device)
-        
-        # Accumulate sums
-        sum_ori += h_ori.sum(dim=0)
-        sum_retrain += h_ret.sum(dim=0)
-        sum_unlearn += h_unl.sum(dim=0)
+        for model_key, model in model_dict.items():
+            h = model.feature_extractor(x).view(x.size(0), -1)
+            if mean_dict[model_key] is None:
+                mean_dict[model_key] = torch.zeros(h.size(1), device=device)
+            mean_dict[model_key] += h.sum(dim=0)
 
     # Calculate means
-    mean_ori = (sum_ori / total_count)
-    mean_ret = (sum_retrain / total_count)
-    mean_unl = (sum_unlearn / total_count)
+    for model_key in mean_dict:
+        mean_dict[model_key] /= total_count
 
-    return mean_ori, mean_ret, mean_unl
+    return mean_dict
 
 def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name):
     # Single pass over the data for mean representation extraction
-    mean_ori, mean_retrain, mean_unlearn = extract_mean_representation_from_three_models(ori_model, retrain_model, unlearned_model, dataloader, device)
+    model_dict = {
+        "original": ori_model,
+        "retrain": retrain_model,
+        "unlearn": unlearned_model
+    }
+    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+    mean_ori = mean_reps_dict["original"]
+    mean_retrain = mean_reps_dict["retrain"]
+    mean_unlearn = mean_reps_dict["unlearn"]
 
     visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
 
@@ -184,3 +180,37 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
         save_path = f"{output_path}rep_shift_{unlearn_method}_{dataset_name}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
+
+def project_representations(
+    representations, ori_model, retrain_model, dataloader, device, projection=""
+):
+    model_dict = {
+        "original": ori_model,
+        "retrain": retrain_model,
+    }
+    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+    mean_ori = mean_reps_dict["original"]
+    mean_retrain = mean_reps_dict["retrain"]
+
+    shift_retrain = mean_retrain - mean_ori
+
+    shift_retrain_norm = torch.norm(shift_retrain)
+    
+    direction = shift_retrain / (shift_retrain_norm + 1e-8)  # Avoid division by zero (D,)
+
+    # scalar projection onto direction
+    scalar_proj = torch.matmul(representations, direction)  # (N,)
+
+    # parallel component
+    parallel = scalar_proj.unsqueeze(1) * direction.unsqueeze(0)  # (N, D)
+
+    if "orthogonal" in projection:
+        # Project representations orthogonally to the shift direction
+        orthogonal = representations - parallel  # (N, D)
+        return orthogonal
+    elif "parallel" in projection:
+        # Project representations parallel to the shift direction
+        return parallel
+    else:
+        # Return original representations if neither orthogonal nor parallel projection is requested
+        return representations
