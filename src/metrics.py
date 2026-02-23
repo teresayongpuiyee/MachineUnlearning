@@ -51,7 +51,7 @@ def collect_entropy(
     model: torch.nn.Module,
     device: torch.device
 ) -> np.array:
-    prob = collect_prob(data_loader, model)
+    prob, _ = collect_prob(data_loader, model)
     enp = entropy(prob).cpu().detach().numpy()
     return enp
 
@@ -107,6 +107,7 @@ def collect_prob(
         data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False
     )
     prob = []
+    all_labels = []
     with torch.no_grad():
         #for batch in data_loader:
         for batch in tqdm(data_loader):
@@ -114,7 +115,8 @@ def collect_prob(
             data, target = batch
             output = model(data)
             prob.append(F.softmax(output, dim=-1).data)
-    return torch.cat(prob)
+            all_labels.append(target)
+    return torch.cat(prob), torch.cat(all_labels, dim=0)
 
 
 # https://arxiv.org/abs/2205.08096
@@ -124,9 +126,9 @@ def get_membership_attack_data(
     test_loader,
     model
 ):
-    retain_prob = collect_prob(retain_loader, model)
-    forget_prob = collect_prob(forget_loader, model)
-    test_prob = collect_prob(test_loader, model)
+    retain_prob, _ = collect_prob(retain_loader, model)
+    forget_prob, _ = collect_prob(forget_loader, model)
+    test_prob, _ = collect_prob(test_loader, model)
 
     forget_enp = np.mean(entropy(forget_prob).cpu().detach().numpy()).item()
 
@@ -177,3 +179,13 @@ def model_evaluation(
     mia_asr = badt_mia(retain_loader= retain_loader, forget_loader= unlearn_loader, test_loader= test_loader, model= model)
 
     return retain_acc, unlearn_acc, mia_asr
+
+def get_entropy(
+    data_loader: DataLoader,
+    model: torch.nn.Module,
+) -> np.array:
+    model.eval()
+    prob, labels = collect_prob(data_loader, model)   
+    enp = entropy(prob).detach().cpu().reshape(-1, 1)
+    labels = labels.cpu()
+    return enp, labels

@@ -76,14 +76,57 @@ def main(args) -> None:
 
     # Evaluation after unlearning
     # Classification-level evaluation
+    train_enp, train_enp_labels = metrics.get_entropy(train_loader, unlearned_model)
+    test_enp, test_enp_labels = metrics.get_entropy(test_loader, unlearned_model)
+    retain_enp, retain_enp_labels = metrics.get_entropy(retain_loader, unlearned_model)
+    forget_enp, _ = metrics.get_entropy(unlearn_loader, unlearned_model)
+
     logger.info(f"Logit MIA evaluation...")
-    # Bad Teacher MIA
-    badt_mia = metrics.badt_mia(
-        retain_loader=retain_loader,
-        forget_loader=unlearn_loader,
-        test_loader=test_loader,
-        model=unlearned_model)
-    logger.info(f"Bad T MIA: {badt_mia}")
+    ## Bad Teacher MIA
+    #badt_mia = metrics.badt_mia(
+    #    retain_loader=retain_loader,
+    #    forget_loader=unlearn_loader,
+    #    test_loader=test_loader,
+    #    model=unlearned_model)
+    #logger.info(f"Bad T MIA: {badt_mia}")
+
+    # Bad Teacher equivalent MIA with balance and normalize features
+    badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
+        retain_reps=retain_enp,
+        forget_reps=forget_enp,
+        test_reps=test_enp,
+        retain_labels=retain_enp_labels
+    )
+    logger.info(f"Bad T MIA: {badt_mia_asr}")
+
+    # SCRUB equivalent MIA with balance and normalize features
+    scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
+        forget_reps=forget_enp,
+        test_reps=test_enp,
+        test_labels=test_enp_labels,
+        unlearn_class=args.unlearn_class
+    )
+    logger.info(f"SCRUB MIA: {scrub_mia_asr}")
+
+    # POUR
+    pour_mia_metrics, pour_mia_asr = repr_metrics.pour_rmia(
+        train_reps=train_enp,
+        test_reps=test_enp,
+        train_labels=train_enp_labels,
+        test_labels=test_enp_labels,
+        unlearn_class=args.unlearn_class,
+    )
+    logger.info(f"POUR MIA: {pour_mia_asr}")
+
+    # SURE
+    sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
+        train_reps=train_enp,
+        test_reps=test_enp,
+        train_labels=train_enp_labels,
+        test_labels=test_enp_labels,
+        unlearn_class=args.unlearn_class,
+    )
+    logger.info(f"SURE MIA: {sure_mia_asr}")
 
     # Representation-level evaluation
     train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
@@ -100,6 +143,15 @@ def main(args) -> None:
         retain_labels=retain_labels
     )
     logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
+
+    # SCRUB equivalent Rep-MIA with balance and normalize features
+    scrub_rep_mia_metrics, scrub_rep_mia_asr = repr_metrics.scrub_rep_mia(
+        forget_reps=forget_reps,
+        test_reps=test_reps,
+        test_labels=test_labels,
+        unlearn_class=args.unlearn_class
+    )
+    logger.info(f"SCRUB rep-MIA: {scrub_rep_mia_asr}")
 
     # POUR
     pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
@@ -130,15 +182,27 @@ def main(args) -> None:
     logger.info("t-SNE visualization saved.")
 
     metrics_dict = {
-        "classification/badt_mia": float(badt_mia),
+        # attack model metrics
+        "classification/badt_mia": badt_mia_metrics,
+        "classification/scrub_mia": scrub_mia_metrics,
+        "classification/pour_mia": pour_mia_metrics,
+        "classification/sure_mia": sure_mia_metrics,
+        
+        # forget asr
+        "classification/badt_mia_asr": badt_mia_asr,
+        "classification/scrub_mia_asr": scrub_mia_asr,
+        "classification/pour_mia_asr": pour_mia_asr,
+        "classification/sure_mia_asr": sure_mia_asr,
         
         # attack model metrics
         "representation/badt_rep_mia": badt_rep_mia_metrics,
+        "representation/scrub_rep_mia": scrub_rep_mia_metrics,
         "representation/pour_rmia": pour_rmia_metrics,
         "representation/sure_miars": sure_miars_metrics,
         
         # forget asr
         "representation/badt_rep_mia_asr": badt_rep_mia_asr,
+        "representation/scrub_rep_mia_asr": scrub_rep_mia_asr,
         "representation/pour_rmia_asr": pour_rmia_asr,
         "representation/sure_miars_asr": sure_miars_asr,
     }

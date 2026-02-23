@@ -126,6 +126,76 @@ def badt_rep_mia(
     asr = forget_pred.mean() * 100  # percent of forget samples predicted as member
     return metrics_dict, round(float(asr), 4)
 
+def scrub_rep_mia(
+    forget_reps: torch.tensor,
+    test_reps: torch.tensor,
+    test_labels: torch.tensor,
+    unlearn_class: int,
+) -> Tuple[dict, Optional[float]]:
+    # Subsampling to balance Member (1) and Non-Member (0) classes
+    target_size = forget_reps.shape[0]
+    if len(test_reps) > target_size:
+        indices = np.arange(len(test_reps))
+        # Stratify by labels to ensure we don't lose the unlearn_class during sampling
+        _, sampled_indices = train_test_split(
+            indices,
+            test_size=target_size,
+            stratify=test_labels.numpy(),
+            random_state=42
+        )
+        test_reps = test_reps[sampled_indices]
+        test_labels = test_labels[sampled_indices]
+
+    # Prepare data for attack
+    forget_labels = torch.full_like(test_labels, fill_value=unlearn_class)
+    X_full = torch.cat([forget_reps, test_reps], dim=0).numpy()
+    X_labels = np.concatenate([forget_labels.numpy(), test_labels.numpy()])
+    y_full = np.concatenate([np.ones(len(forget_reps)), np.zeros(len(test_reps))])
+
+    strat_key = np.array([f"{lbl}_{mem}" for lbl, mem in zip(X_labels, y_full)])
+
+    X_train, X_test, y_train, y_test, _, X_test_labels = train_test_split(
+        X_full,
+        y_full,
+        X_labels,
+        test_size=0.2,
+        stratify=strat_key,   # Stratify using the combined key
+        random_state=42
+    )
+
+    # Feature normalization
+    scaler = StandardScaler()
+    X_train = scaler.fit_transform(X_train)
+    X_test = scaler.transform(X_test)
+
+    clf = LogisticRegression(class_weight="balanced", solver="lbfgs", max_iter=1000)
+    clf.fit(X_train, y_train)
+
+    train_acc = clf.score(X_train, y_train)
+    train_preds = clf.predict(X_train)
+    train_f1 = f1_score(y_train, train_preds, average="macro")
+
+    test_acc = clf.score(X_test, y_test)
+    test_preds = clf.predict(X_test)
+    test_f1 = f1_score(y_test, test_preds, average="macro")
+
+    # MIA logic: How many 'forgotten' samples are predicted as Members (label 1)?
+    mask = (X_test_labels == unlearn_class) & (y_test == 1)
+    if mask.any():
+        forget_preds = clf.predict(X_test[mask])
+        forget_asr = round(float(forget_preds.mean() * 100), 4)
+    else:
+        forget_asr = None
+
+    metrics_dict = {
+        "train_acc": round(float(train_acc * 100), 4),
+        "train_f1": round(float(train_f1 * 100), 4),
+        "test_acc": round(float(test_acc * 100), 4),
+        "test_f1": round(float(test_f1 * 100), 4),
+    }
+
+    return metrics_dict, forget_asr
+
 # Representation-level Membership Inference Attack (MIA) using five-fold attack and linear regressor
 # based on POUR: https://arxiv.org/abs/2511.19339 
 def pour_rmia(
