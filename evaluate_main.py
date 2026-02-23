@@ -23,6 +23,7 @@ parser.add_argument("-unlearned_model", type=str, required=True, help="Path to u
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
                     choices=["orthogonal", "parallel", ""])
+parser.add_argument("-logit_mia", dest="logit_mia", action="store_true", default= False, help= "Evaluate logit MIA")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -80,75 +81,78 @@ def main(args) -> None:
     unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     utils.load_model_weights(model=unlearned_model, model_path=args.unlearned_model,device=device)
 
+    cls_metrics_dict = dict()
+
     # Evaluation after unlearning
-    # Classification-level evaluation
-    train_enp, train_enp_labels = metrics.get_entropy(train_loader, unlearned_model)
-    test_enp, test_enp_labels = metrics.get_entropy(test_loader, unlearned_model)
-    retain_enp, retain_enp_labels = metrics.get_entropy(retain_loader, unlearned_model)
-    forget_enp, _ = metrics.get_entropy(unlearn_loader, unlearned_model)
+    if args.logit_mia:
+        # Classification-level evaluation
+        train_enp, train_enp_labels = metrics.get_entropy(train_loader, unlearned_model)
+        test_enp, test_enp_labels = metrics.get_entropy(test_loader, unlearned_model)
+        retain_enp, retain_enp_labels = metrics.get_entropy(retain_loader, unlearned_model)
+        forget_enp, _ = metrics.get_entropy(unlearn_loader, unlearned_model)
 
-    logger.info(f"Logit MIA evaluation...")
-    ## Bad Teacher MIA
-    #badt_mia = metrics.badt_mia(
-    #    retain_loader=retain_loader,
-    #    forget_loader=unlearn_loader,
-    #    test_loader=test_loader,
-    #    model=unlearned_model)
-    #logger.info(f"Bad T MIA: {badt_mia}")
+        logger.info(f"Logit MIA evaluation...")
+        ## Bad Teacher MIA
+        #badt_mia = metrics.badt_mia(
+        #    retain_loader=retain_loader,
+        #    forget_loader=unlearn_loader,
+        #    test_loader=test_loader,
+        #    model=unlearned_model)
+        #logger.info(f"Bad T MIA: {badt_mia}")
 
-    # Bad Teacher equivalent MIA with balance and normalize features
-    badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
-        retain_reps=retain_enp,
-        forget_reps=forget_enp,
-        test_reps=test_enp,
-        retain_labels=retain_enp_labels,
-        test_labels=test_enp_labels,
-        unlearn_class=args.unlearn_class
-    )
-    logger.info(f"Bad T MIA: {badt_mia_asr}")
+        # Bad Teacher equivalent MIA with balance and normalize features
+        badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
+            retain_reps=retain_enp,
+            forget_reps=forget_enp,
+            test_reps=test_enp,
+            retain_labels=retain_enp_labels,
+            test_labels=test_enp_labels,
+            unlearn_class=args.unlearn_class
+        )
+        logger.info(f"Bad T MIA: {badt_mia_asr}")
 
-    # SCRUB equivalent MIA with balance and normalize features
-    scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
-        forget_reps=forget_enp,
-        test_reps=test_enp,
-        test_labels=test_enp_labels,
-        unlearn_class=args.unlearn_class
-    )
-    logger.info(f"SCRUB MIA: {scrub_mia_asr}")
+        # SCRUB equivalent MIA with balance and normalize features
+        scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
+            forget_reps=forget_enp,
+            test_reps=test_enp,
+            test_labels=test_enp_labels,
+            unlearn_class=args.unlearn_class
+        )
+        logger.info(f"SCRUB MIA: {scrub_mia_asr}")
 
-    # POUR
-    pour_mia_metrics, pour_mia_asr = repr_metrics.pour_rmia(
-        train_reps=train_enp,
-        test_reps=test_enp,
-        train_labels=train_enp_labels,
-        test_labels=test_enp_labels,
-        unlearn_class=args.unlearn_class,
-    )
-    logger.info(f"POUR MIA: {pour_mia_asr}")
+        # POUR
+        pour_mia_metrics, pour_mia_asr = repr_metrics.pour_rmia(
+            train_reps=train_enp,
+            test_reps=test_enp,
+            train_labels=train_enp_labels,
+            test_labels=test_enp_labels,
+            unlearn_class=args.unlearn_class,
+        )
+        logger.info(f"POUR MIA: {pour_mia_asr}")
 
-    # SURE
-    sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
-        train_reps=train_enp,
-        test_reps=test_enp,
-        train_labels=train_enp_labels,
-        test_labels=test_enp_labels,
-        unlearn_class=args.unlearn_class,
-    )
-    logger.info(f"SURE MIA: {sure_mia_asr}")
+        # SURE
+        sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
+            train_reps=train_enp,
+            test_reps=test_enp,
+            train_labels=train_enp_labels,
+            test_labels=test_enp_labels,
+            unlearn_class=args.unlearn_class,
+        )
+        logger.info(f"SURE MIA: {sure_mia_asr}")
 
-    cls_metrics_dict = {
-        # attack model metrics
-        "badt_mia": badt_mia_metrics,
-        "scrub_mia": scrub_mia_metrics,
-        "pour_mia": pour_mia_metrics,
-        "sure_mia": sure_mia_metrics,
-        
-        # forget asr
-        "badt_mia_asr": badt_mia_asr,
-        "scrub_mia_asr": scrub_mia_asr,
-        "pour_mia_asr": pour_mia_asr,
-        "sure_mia_asr": sure_mia_asr,
-    }
+        cls_metrics_dict = {
+            # attack model metrics
+            "badt_mia": badt_mia_metrics,
+            "scrub_mia": scrub_mia_metrics,
+            "pour_mia": pour_mia_metrics,
+            "sure_mia": sure_mia_metrics,
+            
+            # forget asr
+            "badt_mia_asr": badt_mia_asr,
+            "scrub_mia_asr": scrub_mia_asr,
+            "pour_mia_asr": pour_mia_asr,
+            "sure_mia_asr": sure_mia_asr,
+        }
 
     # Representation-level evaluation
     train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
