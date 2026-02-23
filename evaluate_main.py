@@ -171,16 +171,22 @@ def main(args) -> None:
         test_train_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
         test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)        
+        forget_retain_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        forget_unlearn_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
+        test_unlearn_reps = analyse.project_representations(test_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)       
     else:
         test_train_reps = test_reps
         test_retain_reps = test_reps
+        forget_retain_reps = forget_reps       
+        forget_unlearn_reps = forget_reps
+        test_unlearn_reps = test_reps
+
 
     logger.info(f"Representation MIA evaluation...")
     # Bad Teacher equivalent Rep-MIA with balance and normalize features
     badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
         retain_reps=retain_reps,
-        forget_reps=forget_reps,
+        forget_reps=forget_retain_reps,
         test_reps=test_retain_reps,
         retain_labels=retain_labels,
         test_labels=test_labels,
@@ -190,8 +196,8 @@ def main(args) -> None:
 
     # SCRUB equivalent Rep-MIA with balance and normalize features
     scrub_rep_mia_metrics, scrub_rep_mia_asr = repr_metrics.scrub_rep_mia(
-        forget_reps=forget_reps,
-        test_reps=test_reps,
+        forget_reps=forget_unlearn_reps,
+        test_reps=test_unlearn_reps,
         test_labels=test_labels,
         unlearn_class=args.unlearn_class
     )
