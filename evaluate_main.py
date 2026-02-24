@@ -95,7 +95,9 @@ def main(args) -> None:
         retain_reps=retain_enp,
         forget_reps=forget_enp,
         test_reps=test_enp,
-        retain_labels=retain_enp_labels
+        retain_labels=retain_enp_labels,
+        test_labels=test_enp_labels,
+        unlearn_class=args.unlearn_class
     )
     logger.info(f"Bad T MIA: {badt_mia_asr}")
 
@@ -154,7 +156,9 @@ def main(args) -> None:
         retain_reps=retain_reps,
         forget_reps=forget_reps,
         test_reps=test_reps,
-        retain_labels=retain_labels
+        retain_labels=retain_labels,
+        test_labels=test_labels,
+        unlearn_class=args.unlearn_class
     )
     logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
 

@@ -72,6 +72,8 @@ def badt_rep_mia(
     forget_reps: torch.tensor,
     test_reps: torch.tensor,
     retain_labels: torch.tensor,
+    test_labels: torch.tensor,
+    unlearn_class: int,
 ) -> float:
     # Subsampling of retain data
     target_size = test_reps.shape[0]
@@ -84,16 +86,21 @@ def badt_rep_mia(
         random_state=42
     )
     retain_reps = retain_reps[sampled_indices]
+    retain_labels = retain_labels[sampled_indices]
 
     # Prepare data for attack: retain (member, label=1), test (non-member, label=0)
     X_full = torch.cat([retain_reps, test_reps], dim=0).numpy()
+    X_labels = np.concatenate([retain_labels.numpy(), test_labels.numpy()])
     y_full = np.concatenate([np.ones(len(retain_reps)), np.zeros(len(test_reps))])
 
-    X, X_test, y, y_test = train_test_split(
+    strat_key = np.array([f"{lbl}_{mem}" for lbl, mem in zip(X_labels, y_full)])
+
+    X, X_test, y, y_test, _, X_test_labels = train_test_split(
         X_full, 
         y_full, 
+        X_labels,
         test_size=0.2,
-        stratify=y_full,
+        stratify=strat_key,
         random_state=42
     )
 
@@ -114,11 +121,20 @@ def badt_rep_mia(
     test_preds = clf.predict(X_test)
     test_f1 = f1_score(y_test, test_preds, average="macro") * 100
 
+    # MIA logic: How many non member 'forgotten' samples are predicted as Members (label 1)?
+    mask_nonmember = (X_test_labels == unlearn_class) & (y_test == 0)
+    if mask_nonmember.any():
+        forget_nonmember_preds = clf.predict(X_test[mask_nonmember])
+        forget_nonmember_fpr = round(float(forget_nonmember_preds.mean() * 100), 4)
+    else:
+        forget_nonmember_fpr = None
+
     metrics_dict = {
         "train_acc": round(float(train_acc), 4),
         "train_f1": round(float(train_f1), 4),
         "test_acc": round(float(test_acc), 4),
         "test_f1": round(float(test_f1), 4),
+        "forget_fpr": forget_nonmember_fpr
     }
 
     # Attack on forget set (should be members)
@@ -179,7 +195,7 @@ def scrub_rep_mia(
     test_preds = clf.predict(X_test)
     test_f1 = f1_score(y_test, test_preds, average="macro")
 
-    # MIA logic: How many 'forgotten' samples are predicted as Members (label 1)?
+    # MIA logic: How many member 'forgotten' samples are predicted as Members (label 1)?
     mask = (X_test_labels == unlearn_class) & (y_test == 1)
     if mask.any():
         forget_preds = clf.predict(X_test[mask])
@@ -187,11 +203,20 @@ def scrub_rep_mia(
     else:
         forget_asr = None
 
+    # MIA logic: How many non member 'forgotten' samples are predicted as Members (label 1)?
+    mask_nonmember = (X_test_labels == unlearn_class) & (y_test == 0)
+    if mask_nonmember.any():
+        forget_nonmember_preds = clf.predict(X_test[mask_nonmember])
+        forget_nonmember_fpr = round(float(forget_nonmember_preds.mean() * 100), 4)
+    else:
+        forget_nonmember_fpr = None
+
     metrics_dict = {
         "train_acc": round(float(train_acc * 100), 4),
         "train_f1": round(float(train_f1 * 100), 4),
         "test_acc": round(float(test_acc * 100), 4),
         "test_f1": round(float(test_f1 * 100), 4),
+        "forget_fpr": forget_nonmember_fpr
     }
 
     return metrics_dict, forget_asr
@@ -242,7 +267,7 @@ def pour_rmia(
     # Five-fold cross-validation attack
     kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 
-    results = {"train_acc": [], "train_f1": [], "test_acc": [], "test_f1": [], "forget_asr": []}
+    results = {"train_acc": [], "train_f1": [], "test_acc": [], "test_f1": [], "forget_fpr": [], "forget_asr": []}
 
     for train_idx, test_idx in kf.split(X_full, strat_key):
         X_train, y_train = X_full[train_idx], y_full[train_idx]
@@ -270,11 +295,18 @@ def pour_rmia(
             forget_preds = clf.predict(X_test[mask])
             results["forget_asr"].append(forget_preds.mean())
 
+        # MIA logic: How many non member 'forgotten' samples are predicted as Members (label 1)?
+        mask_nonmember = (X_test_labels == unlearn_class) & (y_test == 0)
+        if mask_nonmember.any():
+            forget_nonmember_preds = clf.predict(X_test[mask_nonmember])
+            results["forget_fpr"].append(forget_nonmember_preds.mean())
+
     metrics_dict = {
         "train_acc": round(float(np.mean(results["train_acc"])* 100), 4),
         "train_f1": round(float(np.mean(results["train_f1"])* 100), 4),
         "test_acc": round(float(np.mean(results["test_acc"])* 100), 4),
         "test_f1": round(float(np.mean(results["test_f1"])* 100), 4),
+        "forget_fpr": round(float(np.mean(results["forget_fpr"])* 100), 4),
     }
 
     forget_asr =None
@@ -353,7 +385,7 @@ def sure_miars(
     test_preds = knn.predict(X_test)
     test_f1 = f1_score(y_test, test_preds, average="macro")
 
-    # MIA logic: How many 'forgotten' samples are predicted as Members (label 1)?
+    # MIA logic: How many member 'forgotten' samples are predicted as Members (label 1)?
     mask = (X_test_labels == unlearn_class) & (y_test == 1)
     if mask.any():
         forget_preds = knn.predict(X_test[mask])
@@ -361,11 +393,20 @@ def sure_miars(
     else:
         forget_asr = None
 
+    # MIA logic: How many non member 'forgotten' samples are predicted as Members (label 1)?
+    mask_nonmember = (X_test_labels == unlearn_class) & (y_test == 0)
+    if mask_nonmember.any():
+        forget_nonmember_preds = knn.predict(X_test[mask_nonmember])
+        forget_nonmember_fpr = round(float(forget_nonmember_preds.mean() * 100), 4)
+    else:
+        forget_nonmember_fpr = None
+
     metrics_dict = {
         "train_acc": round(float(train_acc * 100), 4),
         "train_f1": round(float(train_f1 * 100), 4),
         "test_acc": round(float(test_acc * 100), 4),
         "test_f1": round(float(test_f1 * 100), 4),
+        "forget_fpr": forget_nonmember_fpr
     }
 
     return metrics_dict, forget_asr
