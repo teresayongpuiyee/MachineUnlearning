@@ -128,6 +128,20 @@ def main(args) -> None:
     )
     logger.info(f"SURE MIA: {sure_mia_asr}")
 
+    cls_metrics_dict = {
+        # attack model metrics
+        "badt_mia": badt_mia_metrics,
+        "scrub_mia": scrub_mia_metrics,
+        "pour_mia": pour_mia_metrics,
+        "sure_mia": sure_mia_metrics,
+        
+        # forget asr
+        "badt_mia_asr": badt_mia_asr,
+        "scrub_mia_asr": scrub_mia_asr,
+        "pour_mia_asr": pour_mia_asr,
+        "sure_mia_asr": sure_mia_asr,
+    }
+
     # Representation-level evaluation
     train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
     test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
@@ -172,6 +186,20 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class,
     )
     logger.info(f"SURE MIARS: {sure_miars_asr}")
+
+    rep_metrics_dict = {       
+        # attack model metrics
+        "badt_rep_mia": badt_rep_mia_metrics,
+        "scrub_rep_mia": scrub_rep_mia_metrics,
+        "pour_rmia": pour_rmia_metrics,
+        "sure_miars": sure_miars_metrics,
+        
+        # forget asr
+        "badt_rep_mia_asr": badt_rep_mia_asr,
+        "scrub_rep_mia_asr": scrub_rep_mia_asr,
+        "pour_rmia_asr": pour_rmia_asr,
+        "sure_miars_asr": sure_miars_asr,
+    }
     
     repr_metrics.visualize_tsne(
         reps=train_reps,
@@ -182,29 +210,8 @@ def main(args) -> None:
     logger.info("t-SNE visualization saved.")
 
     metrics_dict = {
-        # attack model metrics
-        "classification/badt_mia": badt_mia_metrics,
-        "classification/scrub_mia": scrub_mia_metrics,
-        "classification/pour_mia": pour_mia_metrics,
-        "classification/sure_mia": sure_mia_metrics,
-        
-        # forget asr
-        "classification/badt_mia_asr": badt_mia_asr,
-        "classification/scrub_mia_asr": scrub_mia_asr,
-        "classification/pour_mia_asr": pour_mia_asr,
-        "classification/sure_mia_asr": sure_mia_asr,
-        
-        # attack model metrics
-        "representation/badt_rep_mia": badt_rep_mia_metrics,
-        "representation/scrub_rep_mia": scrub_rep_mia_metrics,
-        "representation/pour_rmia": pour_rmia_metrics,
-        "representation/sure_miars": sure_miars_metrics,
-        
-        # forget asr
-        "representation/badt_rep_mia_asr": badt_rep_mia_asr,
-        "representation/scrub_rep_mia_asr": scrub_rep_mia_asr,
-        "representation/pour_rmia_asr": pour_rmia_asr,
-        "representation/sure_miars_asr": sure_miars_asr,
+        "classification": cls_metrics_dict,
+        "representation": rep_metrics_dict,
     }
 
     logger.info("Saving computed metrics...")
