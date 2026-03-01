@@ -571,3 +571,32 @@ def visualize_tsne(
     os.makedirs(save_path, exist_ok=True)
     plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
     plt.show()
+
+def linear_cka(X, Y, eps=1e-8):
+    """
+    X: (n, d1)
+    Y: (n, d2)
+    """
+
+    # Center features
+    X = X - X.mean(0, keepdim=True)
+    Y = Y - Y.mean(0, keepdim=True)
+
+    # Frobenius norm squared of cross-covariance
+    numerator = torch.norm(X.T @ Y, p='fro') ** 2
+
+    # Normalization
+    denom = torch.norm(X.T @ X, p='fro') * torch.norm(Y.T @ Y, p='fro')
+
+    cka = numerator / (denom + eps)
+
+    return round(cka.item(), 4)
+
+def representation_unlearning_score(cka_f, cka_r, original=False):
+    # Compute harmonic mean between cka_f and cka_r
+    if original:
+        # If original, use 1 - cka_f for the harmonic mean calculation
+        cka_f = 1 - cka_f
+
+    rus = 2 * cka_f * cka_r / (cka_f + cka_r + 1e-8)
+    return round(rus.item(), 4)
