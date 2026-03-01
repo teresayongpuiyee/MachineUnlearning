@@ -235,27 +235,20 @@ def main(args) -> None:
     cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
     cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
 
-    cka_f_o_r = repr_metrics.linear_cka(forget_ori_reps, forget_retrain_reps)
-    cka_r_o_r = repr_metrics.linear_cka(retain_ori_reps, retain_retrain_reps)
-
     cka_metrics_dict = {
         "forget_unlearn_original": cka_f_o,
         "retain_unlearn_original": cka_r_o,
         "forget_unlearn_retrain": cka_f_r,
         "retain_unlearn_retrain": cka_r_r,
-        "forget_original_retrain": cka_f_o_r,
-        "retain_original_retrain": cka_r_o_r,
     }
 
     # RUS
     rus_o = repr_metrics.representation_unlearning_score(cka_f_o, cka_r_o, original=True)
     rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
-    rus_o_r = repr_metrics.representation_unlearning_score(cka_f_o_r, cka_r_o_r)
 
     rus_metrics_dict = {
         "unlearn_original": rus_o,
         "unlearn_retrain": rus_r,
-        "original_retrain": rus_o_r,
     }
 
     metrics_dict = {

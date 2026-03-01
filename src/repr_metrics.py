@@ -599,4 +599,4 @@ def representation_unlearning_score(cka_f, cka_r, original=False):
         cka_f = 1 - cka_f
 
     rus = 2 * cka_f * cka_r / (cka_f + cka_r + 1e-8)
-    return round(rus.item(), 4)
+    return round(rus, 4)
