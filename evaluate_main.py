@@ -213,6 +213,7 @@ def main(args) -> None:
     )
     logger.info("t-SNE visualization saved.")
 
+    logger.info(f"Representation similarity evaluation...")
     # CKA
     model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
@@ -231,9 +232,11 @@ def main(args) -> None:
 
     cka_f_o = repr_metrics.linear_cka(forget_reps, forget_ori_reps)
     cka_r_o = repr_metrics.linear_cka(retain_reps, retain_ori_reps)
+    logger.info(f"CKA between unlearned and original model: forget={cka_f_o}, retain={cka_r_o}")
 
     cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
     cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
+    logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
 
     cka_metrics_dict = {
         "forget_unlearn_original": cka_f_o,
@@ -244,7 +247,10 @@ def main(args) -> None:
 
     # RUS
     rus_o = repr_metrics.representation_unlearning_score(cka_f_o, cka_r_o, original=True)
+    logger.info(f"Representation Unlearning Score (RUS) with original model: {rus_o}")
+    
     rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
+    logger.info(f"Representation Unlearning Score (RUS) with retrained model: {rus_r}")
 
     rus_metrics_dict = {
         "unlearn_original": rus_o,
