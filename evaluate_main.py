@@ -251,26 +251,33 @@ def main(args) -> None:
 
     logger.info(f"Representation similarity evaluation...")
     # CKA
-    model_dir = "/".join(args.unlearned_model.split("/")[:-1])
+    if len(args.project_method) == 0:
+        model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
-    ori_model_path = model_dir + "/baseline.pt"
-    ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-    utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
-    
-    retrain_model_path = model_dir + "/retrain.pt"
-    retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-    utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
+        ori_model_path = model_dir + "/baseline.pt"
+        ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
+        
+        retrain_model_path = model_dir + "/retrain.pt"
+        retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
 
     retain_ori_reps, _ = repr_metrics.get_representations(retain_loader, ori_model)
     forget_ori_reps, _ = repr_metrics.get_representations(unlearn_loader, ori_model)
     retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, retrain_model)
     forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, retrain_model)
 
-    cka_f_o = repr_metrics.linear_cka(forget_reps, forget_ori_reps)
+    if len(args.project_method) > 0:
+        retain_ori_reps = analyse.project_representations(retain_ori_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        forget_ori_reps = analyse.project_representations(forget_ori_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
+        retain_retrain_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        forget_retrain_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)        
+    
+    cka_f_o = repr_metrics.linear_cka(forget_unlearn_reps, forget_ori_reps)
     cka_r_o = repr_metrics.linear_cka(retain_reps, retain_ori_reps)
     logger.info(f"CKA between unlearned and original model: forget={cka_f_o}, retain={cka_r_o}")
 
-    cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
+    cka_f_r = repr_metrics.linear_cka(forget_unlearn_reps, forget_retrain_reps)
     cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
     logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
 
