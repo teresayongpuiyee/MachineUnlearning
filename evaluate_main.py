@@ -34,7 +34,7 @@ def main(args) -> None:
     exp_name = unlearned_model_path_list[-3]
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
 
-    output_path = f"./{exp_name}/mia_evaluate/"
+    output_path = f"./{exp_name}/mia_cka_evaluate/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
