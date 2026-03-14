@@ -39,7 +39,7 @@ def main(args) -> None:
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
 
     if len(args.project_method) > 0:
-        output_path = f"./{exp_name}/mia_evaluate_{args.project_method}/"
+        output_path = f"./{exp_name}/mia_cka_evaluate_{args.project_method}/"
     else:
         output_path = f"./{exp_name}/mia_cka_evaluate/"
     utils.create_directory_if_not_exists(output_path)
