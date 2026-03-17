@@ -39,7 +39,9 @@ parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
                               "ntk",
                               "fisher",
                               "unsir",
-                              "ssd"],
+                              "ssd",
+                              "pour_p",
+                              "pour_d"],
                     help= "Baselines unlearn method")
 
 parser.add_argument("-model_path", type= str,
@@ -121,7 +123,7 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    test_retain_dataset, _ = dataset.split_unlearn_dataset(
+    test_retain_dataset, test_unlearn_dataset = dataset.split_unlearn_dataset(
         dataset=test_dataset,
         unlearn_class=args.unlearn_class
     )
@@ -135,6 +137,7 @@ def main(args) -> None:
 
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    test_unlearn_loader = DataLoader(test_unlearn_dataset, batch_size=args.batch_size, shuffle=False)
     retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
@@ -188,6 +191,10 @@ def main(args) -> None:
     logger.info(f"Retain acc: {retain_acc}")
     unlearn_acc = metrics.evaluate(val_loader=unlearn_eval_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Unlearn_acc: {unlearn_acc}")
+    test_retain_acc = metrics.evaluate(val_loader=test_retain_loader, model=unlearned_model, device=device)['Acc']
+    logger.info(f"Test retain acc: {test_retain_acc}")
+    test_unlearn_acc = metrics.evaluate(val_loader=test_unlearn_loader, model=unlearned_model, device=device)['Acc']
+    logger.info(f"Test unlearn acc: {test_unlearn_acc}")
 
     logger.info(f"Unlearned representation")
     linear_probe_acc = repr_metrics.linear_probing(
@@ -203,6 +210,8 @@ def main(args) -> None:
     metrics_dict = {
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
+        "classification/test_retain_acc": test_retain_acc,
+        "classification/test_unlearn_acc": test_unlearn_acc,
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }

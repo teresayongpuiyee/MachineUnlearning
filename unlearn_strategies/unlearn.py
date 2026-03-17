@@ -4,11 +4,12 @@ Unlearning tools function
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, dataset
-from src import dataset
+from src import dataset, scheduler, metrics
 import numpy as np
 import torch.distributions as distributions
 from torch import nn
 from typing import Dict, List
+from tqdm import tqdm
 
 
 def get_classwise_ds(
@@ -692,3 +693,106 @@ def train_distill(
         return top1.avg, losses.avg
     else:
         return kd_losses.avg
+
+class POUR_P(nn.Module):
+    def __init__(self, feature_extractor, fc, unlearn_class: int):
+        super().__init__()
+        self.ori_feature_extractor = feature_extractor
+        self.fc = fc
+        
+        w_c = fc.weight[unlearn_class].detach() # (D,)
+        self.register_buffer("unit_w_c", F.normalize(w_c, dim=0))
+
+    def feature_extractor(self, x):
+        feat = self.ori_feature_extractor(x)
+        feat = torch.flatten(feat, 1)  # (N,D)
+
+        # scalar projection onto direction
+        scalar_proj = feat @ self.unit_w_c  # (N,D) @ (D,) -> (N,)
+
+        # parallel component
+        parallel = scalar_proj.unsqueeze(1) * self.unit_w_c  # (N, 1) * (1, D) -> (N, D)
+        orthogonal = feat - parallel
+        
+        return orthogonal.unsqueeze(-1).unsqueeze(-1)
+    
+    def classifier_head(self, x):
+        x = x.view(x.size(0), -1)
+        x = self.fc(x)
+        return x
+
+    def forward(self, x):
+        x = self.feature_extractor(x)
+        x = self.classifier_head(x)
+        return x
+    
+def pour_distill(
+    logger,
+    teacher_model,
+    student_model,
+    unlearn_loader,
+    test_loader,
+    device,
+    epochs = 10,
+    optimizer = "adam",
+    lr = 0.0001,
+    momentum = 0,
+    weight_decay = 0,
+    scheduler_type = "constant",
+    milestones = [10, 20],
+    t0 = 5
+):
+    if optimizer not in ["sgd", "adam"]:
+        raise Exception("Select correct optimizer")
+    if optimizer == "sgd":
+        optimizer = torch.optim.SGD(student_model.feature_extractor.parameters(), lr=lr, momentum=momentum)
+    else:
+        optimizer = torch.optim.Adam(student_model.feature_extractor.parameters(), lr=lr, weight_decay=weight_decay)
+
+    lr_scheduler = scheduler.get_lr_scheduler(
+        scheduler_type, 
+        optimizer, 
+        milestones=milestones, 
+        epochs=epochs, 
+        t0=t0
+    )
+
+    for epoch in tqdm(range(1, epochs + 1), desc= "Fine-tuning POUR-D"):
+        loss_list = []
+        student_model.train()
+
+        for x, y in unlearn_loader:
+
+            x = x.to(device)
+            y = y.to(device)
+
+            optimizer.zero_grad()
+
+            with torch.no_grad():
+                teacher_feat = teacher_model.feature_extractor(x)   # (N, D)
+                teacher_feat = torch.flatten(teacher_feat, 1)
+
+            student_feat = student_model.feature_extractor(x)
+            student_feat = torch.flatten(student_feat, 1)                 # (N, D)
+
+            loss = F.mse_loss(student_feat, teacher_feat)
+
+            loss.backward()
+            optimizer.step()
+
+            loss_list.append(loss.item())
+        
+        mean_loss = np.mean(np.array(loss_list))
+        train_acc = metrics.evaluate(val_loader=unlearn_loader, model= student_model, device= device)['Acc']
+        test_metrics = metrics.evaluate(val_loader=test_loader, model= student_model, device= device)
+        test_loss = test_metrics['Loss']
+        test_acc = test_metrics['Acc']
+        logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Test Loss: {test_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
+
+        if lr_scheduler is not None:
+            if scheduler_type == "reducelronplateau":
+                lr_scheduler.step(mean_loss)
+            else:
+                lr_scheduler.step()
+
+    return student_model

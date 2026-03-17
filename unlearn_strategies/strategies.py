@@ -765,3 +765,60 @@ def ssd(
     pdr.modify_weight(original_importances, sample_importances)
 
     return model
+
+def pour_p(
+    model: torch.nn.Module,
+    unlearn_class: int,
+    device: torch.device,
+    **kwargs,
+) -> torch.nn.Module:
+    pour_p_model = unlearn.POUR_P(
+        copy.deepcopy(model.feature_extractor), 
+        copy.deepcopy(model.fc), 
+        unlearn_class
+    ).to(device)
+    return pour_p_model
+
+def pour_d(
+    logger,
+    model: torch.nn.Module,
+    unlearn_class: int,
+    unlearn_loader: DataLoader,
+    test_loader: DataLoader,
+    device: torch.device,
+    **kwargs,
+) -> torch.nn.Module:
+    teacher_model = unlearn.POUR_P(
+        copy.deepcopy(model.feature_extractor), 
+        copy.deepcopy(model.fc), 
+        unlearn_class
+    ).to(device)
+
+    student_model = copy.deepcopy(model)
+
+    # Freeze teacher model
+    teacher_model.eval()
+    for p in teacher_model.parameters():
+        p.requires_grad = False
+
+    # Freeze student classifier head
+    for p in student_model.fc.parameters():
+        p.requires_grad = False
+    
+    pour_d_model = unlearn.pour_distill(
+                        logger,
+                        teacher_model,
+                        student_model,
+                        unlearn_loader,
+                        test_loader,
+                        device,
+                    )
+    
+    w_c = pour_d_model.fc.weight[unlearn_class]
+    x, _ = next(iter(unlearn_loader))
+    feat = pour_d_model.feature_extractor(x.to(device))
+    feat = torch.flatten(feat,1)
+
+    print((feat @ w_c).abs().mean())
+    
+    return pour_d_model
