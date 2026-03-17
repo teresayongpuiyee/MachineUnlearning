@@ -745,9 +745,9 @@ def pour_distill(
     if optimizer not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
     if optimizer == "sgd":
-        optimizer = torch.optim.SGD(student_model.feature_extractor.parameters(), lr=lr, momentum=momentum)
+        optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, student_model.parameters()), lr=lr, momentum=momentum)
     else:
-        optimizer = torch.optim.Adam(student_model.feature_extractor.parameters(), lr=lr, weight_decay=weight_decay)
+        optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, student_model.parameters()), lr=lr, weight_decay=weight_decay)
 
     lr_scheduler = scheduler.get_lr_scheduler(
         scheduler_type, 
