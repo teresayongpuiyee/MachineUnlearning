@@ -814,11 +814,19 @@ def pour_d(
                         device,
                     )
     
-    w_c = pour_d_model.fc.weight[unlearn_class]
+    pour_d_model.eval()
+    
     x, _ = next(iter(unlearn_loader))
-    feat = pour_d_model.feature_extractor(x.to(device))
-    feat = torch.flatten(feat,1)
+    x = x.to(device)
 
-    print((feat @ w_c).abs().mean())
+    with torch.no_grad():
+        feat = pour_d_model.feature_extractor(x)
+        feat = torch.flatten(feat,1)
+    
+    w_c = pour_d_model.fc.weight[unlearn_class]
+
+    dot = (feat @ w_c).abs().mean()
+    
+    logger.info("Mean absolute value of feature-weight dot product: %f", dot)
     
     return pour_d_model
