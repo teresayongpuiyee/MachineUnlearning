@@ -25,6 +25,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
+parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_true", default=False, help="Use pretrained timm model")
 parser.add_argument("-pretrained_weight", type= str, default= "", help= "Pretrained model path")
 parser.add_argument("-resume", dest="resume", action="store_true", default=False, help="Resume training from checkpoint")
 
@@ -123,7 +124,7 @@ if __name__ == "__main__":
 
     # Model preparation
     model = getattr(models, args.model)(
-        num_classes= num_classes, input_channels= num_channels).to(device)
+        num_classes= num_classes, input_channels= num_channels, pretrained=args.pretrained_timm).to(device)
 
     model = utils.load_pretrained_weights(
         model= model,

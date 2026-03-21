@@ -127,7 +127,7 @@ def main(args) -> None:
 
     # Model preparation
     model = getattr(models, args.model)(
-        num_classes=num_classes, input_channels=num_channels).to(device)
+        num_classes=num_classes, input_channels=num_channels, pretrained=args.pretrained_timm).to(device)
     unlearning_teacher = getattr(models, args.model)(
         num_classes=num_classes, input_channels=num_channels).to(device)
 
