@@ -95,6 +95,8 @@ def main(args) -> None:
     # Model preparation
     model = getattr(models, args.model)(
         num_classes=num_classes, input_channels=num_channels, pretrained=args.pretrained_timm).to(device)
+    if args.pretrained_timm:
+        logger.info("Using pretrained model from timm...")
     
     # Dataset
     train_aug_dataset, test_dataset = dataset.get_dataset(

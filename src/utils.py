@@ -152,7 +152,7 @@ def load_pretrained_weights(
         model.load_state_dict(state_dict, strict=False)
         logger.info(f"Loaded pretrained model from {pretrained_weight}")
     else:
-        logger.info("No pretrained model path provided, training from scratch.")
+        logger.info("No pretrained model path provided.")
     
     return model
 
