@@ -36,8 +36,11 @@ class MNist(MNIST):
         **kwargs,
     ):
 
-        transform = [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
-        transform.append(transforms.Resize(img_size))
+        transform = [
+            transforms.Resize(img_size),
+            transforms.ToTensor(), 
+            transforms.Normalize((0.5,), (0.5,))
+        ]
         transform = transforms.Compose(transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
@@ -57,8 +60,11 @@ class FMNist(FashionMNIST):
         img_size: int = 28,
         **kwargs,
     ):
-        transform = [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
-        transform.append(transforms.Resize(img_size))
+        transform = [
+            transforms.Resize(img_size),
+            transforms.ToTensor(), 
+            transforms.Normalize((0.5,), (0.5,))
+        ]
         transform = transforms.Compose(transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
@@ -81,13 +87,14 @@ class Cifar10(CIFAR10):
         # Use list() to create a NEW copy of the global list
         if train:
             if augment:
-                transform_list = list(transform_train_augment)
+                transform_list = transform_train_augment
             else:
-                transform_list = list(transform_test)
+                transform_list = transform_test
         else:
-            transform_list = list(transform_test)
-        transform_list.append(transforms.Resize(img_size))
-        transform = transforms.Compose(transform_list)
+            transform_list = transform_test
+        final_transform = [transforms.Resize(img_size)]
+        final_transform.extend(transform_list)
+        transform = transforms.Compose(final_transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
 
@@ -115,13 +122,14 @@ class Cifar100(CIFAR100):
         else:
             if train:
                 if augment:
-                    transform = transform_train_augment
+                    transform_list = transform_train_augment
                 else:
-                    transform = transform_test
+                    transform_list = transform_test
             else:
-                transform = transform_test
-            transform.append(transforms.Resize(img_size))
-            transform = transforms.Compose(transform)
+                transform_list = transform_test
+            final_transform = [transforms.Resize(img_size)]
+            final_transform.extend(transform_list)
+            transform = transforms.Compose(final_transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
 
@@ -142,13 +150,14 @@ class Cifar20(CIFAR100):
 ):
         if train:
             if augment:
-                transform = transform_train_augment
+                transform_list = transform_train_augment
             else:
-                transform = transform_test
+                transform_list = transform_test
         else:
-            transform = transform_test
-        transform.append(transforms.Resize(img_size))
-        transform = transforms.Compose(transform)
+            transform_list = transform_test
+        final_transform = [transforms.Resize(img_size)]
+        final_transform.extend(transform_list)
+        transform = transforms.Compose(final_transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
 
