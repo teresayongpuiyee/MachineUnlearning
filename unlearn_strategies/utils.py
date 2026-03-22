@@ -88,10 +88,19 @@ def training_optimization(
                 optimizer, 
                 milestones=args.milestones, 
                 epochs=args.epochs, 
-                t0=args.t0
+                t0=args.t0,
+                lr_patience=args.lr_patience,
+                lr_gamma=args.lr_gamma,
+                lr_factor=args.lr_factor
             )
         else:
             lr_scheduler = None
+
+        if args.warm > 0:
+            iter_per_epoch = len(train_loader)
+            warmup_scheduler = scheduler.WarmUpLR(optimizer, iter_per_epoch * args.warm)
+        else:
+            warmup_scheduler = None
 
     loss_func = nn.CrossEntropyLoss().to(device)
 
@@ -110,6 +119,10 @@ def training_optimization(
 
             loss_list.append(loss.item())
 
+            if desc == "Retraining model":
+                if warmup_scheduler is not None and epoch <= args.warm:
+                    warmup_scheduler.step()
+
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
         test_metrics = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)
@@ -118,7 +131,7 @@ def training_optimization(
         logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Test Loss: {test_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
         if desc == "Retraining model":
-            if lr_scheduler is not None:
+            if lr_scheduler is not None and epoch >= args.warm:
                 if args.lr_scheduler == "reducelronplateau":
                     lr_scheduler.step(test_loss)
                 else:
@@ -137,7 +150,7 @@ def training_optimization(
                 else:
                     patience_counter += 1
 
-                if patience_counter >= args.patience:
+                if patience_counter >= args.es_patience:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
         else:

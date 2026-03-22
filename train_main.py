@@ -49,9 +49,13 @@ parser.add_argument("-lr_scheduler", type= str, default= "constant",
                         ])
 parser.add_argument("-milestones", type= int, nargs='+', default= [10, 20], help= "Steps for lr decay in multisteplr")
 parser.add_argument("-t0", type= int, default= 5, help= "Number of epochs for the first restart in CosineAnnealingWarmRestarts")
+parser.add_argument('-lr_patience', type=int, default=5, help='Learning plateau patience')
+parser.add_argument('-lr_gamma', type=float, default=0.1, help='Learning rate decay factor')
+parser.add_argument('-lr_factor', type=float, default=0.1, help='Learning rate factor for ReduceLROnPlateau')
+parser.add_argument('-warm', type=int, default=0, help='Warm up training phase')
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
-parser.add_argument('-patience', type=int, default=10, help='Early stopping patience')
+parser.add_argument('-es_patience', type=int, default=10, help='Early stopping patience')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -171,8 +175,17 @@ if __name__ == "__main__":
         optimizer, 
         milestones=args.milestones, 
         epochs=args.epochs, 
-        t0=args.t0
+        t0=args.t0,
+        lr_patience=args.lr_patience,
+        lr_gamma=args.lr_gamma,
+        lr_factor=args.lr_factor
     )
+
+    if args.warm > 0:
+        iter_per_epoch = len(train_loader)
+        warmup_scheduler = scheduler.WarmUpLR(optimizer, iter_per_epoch * args.warm)
+    else:
+        warmup_scheduler = None
 
     loss_func = nn.CrossEntropyLoss().to(device)
 
@@ -213,13 +226,16 @@ if __name__ == "__main__":
             # Evaluation preparation
             loss_list.append(loss.item())
 
+            if warmup_scheduler is not None and epoch <= args.warm:
+                warmup_scheduler.step()
+
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= model, device= device)['Acc']
         test_metrics = metrics.evaluate(val_loader= test_loader, model= model, device= device)
         test_loss = test_metrics['Loss']
         test_acc = test_metrics['Acc']
 
-        if lr_scheduler is not None:
+        if lr_scheduler is not None and epoch >= args.warm:
             if args.lr_scheduler == "reducelronplateau":
                 lr_scheduler.step(test_loss)
             else:
@@ -267,7 +283,7 @@ if __name__ == "__main__":
             )
 
         if args.early_stop:
-            if patience_counter >= args.patience:
+            if patience_counter >= args.es_patience:
                 logger.info(f"Early stopping at epoch {epoch}")
                 break
 
