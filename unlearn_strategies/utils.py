@@ -50,26 +50,31 @@ def training_optimization(
     if opt not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
 
-    if isinstance(lr, list) and len(lr) == 2:
-        backbone_params = []
-        fc_params = []
+    if isinstance(lr, list):
+        if len(lr) == 2:
+            backbone_params = []
+            fc_params = []
 
-        for name, param in trained_model.named_parameters():
-            if name.startswith("fc."):
-                fc_params.append(param)
-            else:
-                backbone_params.append(param)
-        
-        optim_param = [
-            {"params": backbone_params, "lr": lr[0]},
-            {"params": fc_params, "lr": lr[1]}
-        ]
+            for name, param in trained_model.named_parameters():
+                if name.startswith("fc."):
+                    fc_params.append(param)
+                else:
+                    backbone_params.append(param)
+            
+            optim_param = [
+                {"params": backbone_params, "lr": lr[0]},
+                {"params": fc_params, "lr": lr[1]}
+            ]
+        elif len(lr) == 1:
+            optim_param = [
+                {"params": trained_model.parameters(), "lr": lr[0]}
+            ]
     elif isinstance(lr, float):
         optim_param = [
             {"params": trained_model.parameters(), "lr": lr}
         ]
     else:
-        raise ValueError("Invalid learning rate configuration. Accept a float or a list of two floats.")
+        raise ValueError("Invalid learning rate configuration. Accept a float or a list of at most two floats.")
 
     if opt == "sgd":
         optimizer = torch.optim.SGD(optim_param, momentum= momentum)

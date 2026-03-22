@@ -32,7 +32,7 @@ parser.add_argument("-resume", dest="resume", action="store_true", default=False
 # Training hyperparameter
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
-parser.add_argument("-lr", type=float, default= 1e-4, help='Learning rate')
+parser.add_argument("-lr", type=float, nargs='+', default= [1e-4], help='Learning rate(s)')
 parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "adam"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
@@ -140,7 +140,7 @@ if __name__ == "__main__":
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
 
-    if isinstance(args.lr, list) and len(args.lr) == 2:
+    if len(args.lr) == 2:
         backbone_params = []
         fc_params = []
 
@@ -154,12 +154,12 @@ if __name__ == "__main__":
             {"params": backbone_params, "lr": args.lr[0]},
             {"params": fc_params, "lr": args.lr[1]}
         ]
-    elif isinstance(args.lr, float):
+    elif len(args.lr) == 1:
         optim_param = [
-            {"params": model.parameters(), "lr": args.lr}
+            {"params": model.parameters(), "lr": args.lr[0]}
         ]
     else:
-        raise ValueError("Invalid learning rate configuration. Accept a float or a list of two floats.")
+        raise ValueError("Invalid learning rate configuration. Accept a list of one or two floats.")
 
     if args.optimizer == "sgd":
         optimizer = torch.optim.SGD(optim_param, momentum=args.momentum, weight_decay=args.weight_decay)
