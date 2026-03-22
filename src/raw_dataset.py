@@ -1,6 +1,8 @@
 from torchvision import transforms, datasets
 from torchvision.datasets import CIFAR100, CIFAR10, MNIST, FashionMNIST
 from torch.utils.data import Dataset
+from timm.data import resolve_data_config
+from timm.data.transforms_factory import create_transform
 
 
 CIFAR_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
@@ -30,7 +32,8 @@ class MNist(MNIST):
         train: bool,
         download: bool,
         augment: bool= True,
-        img_size: int= 28
+        img_size: int= 28,
+        **kwargs,
     ):
 
         transform = [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
@@ -51,7 +54,8 @@ class FMNist(FashionMNIST):
         train: bool,
         download: bool,
         augment: bool = True,
-        img_size: int = 28
+        img_size: int = 28,
+        **kwargs,
     ):
         transform = [transforms.ToTensor(), transforms.Normalize((0.5,), (0.5,))]
         transform.append(transforms.Resize(img_size))
@@ -71,7 +75,8 @@ class Cifar10(CIFAR10):
         train: bool,
         download: bool,
         augment: bool = True,
-        img_size: int = 32
+        img_size: int = 32,
+        **kwargs,
     ):
         # Use list() to create a NEW copy of the global list
         if train:
@@ -97,18 +102,26 @@ class Cifar100(CIFAR100):
         root: str,
         train: bool,
         download: bool,
+        model,
         augment: bool = True,
-        img_size: int = 32
+        img_size: int = 32,
+        pretrained_timm: bool = False,
+        **kwargs,
     ):
-        if train:
-            if augment:
-                transform = transform_train_augment
+        if pretrained_timm:
+            config = resolve_data_config({}, model=model)
+            is_training = train and augment
+            transform = create_transform(**config, is_training=is_training)
+        else:
+            if train:
+                if augment:
+                    transform = transform_train_augment
+                else:
+                    transform = transform_test
             else:
                 transform = transform_test
-        else:
-            transform = transform_test
-        transform.append(transforms.Resize(img_size))
-        transform = transforms.Compose(transform)
+            transform.append(transforms.Resize(img_size))
+            transform = transforms.Compose(transform)
 
         super().__init__(root=root, train=train, download=download, transform=transform)
 
@@ -124,7 +137,8 @@ class Cifar20(CIFAR100):
         train: bool,
         download: bool,
         augment: bool = True,
-        img_size: int = 32
+        img_size: int = 32,
+        **kwargs,
 ):
         if train:
             if augment:
@@ -187,7 +201,8 @@ class TinyImagenet(Dataset):
         train: bool,
         download: bool,
         augment: bool = True,
-        img_size: int = 64
+        img_size: int = 64,
+        **kwargs,
     ):
         self.root = root
         self.train = train

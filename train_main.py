@@ -114,18 +114,22 @@ if __name__ == "__main__":
     # Device
     device, device_name = utils.device_configuration(args= args)
 
-    # Dataset
-    train_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
-        dataset_name= args.dataset, root= args.root
-    )
-
-    train_loader = DataLoader(train_dataset, batch_size= args.batch_size, shuffle= True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle= False)
+    # Get dataset info e.g., classes and channels
+    num_classes, num_channels = dataset.dataset_info(dataset_name= args.dataset)
 
     # Model preparation
     model = getattr(models, args.model)(
         num_classes= num_classes, input_channels= num_channels, pretrained=args.pretrained_timm).to(device)
 
+    # Dataset
+    train_dataset, test_dataset = dataset.get_dataset(
+        dataset_name= args.dataset, root= args.root, model=model, pretrained_timm= args.pretrained_timm
+    )
+
+    train_loader = DataLoader(train_dataset, batch_size= args.batch_size, shuffle= True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle= False)
+
+    # Load pretrained weights if provided
     model = utils.load_pretrained_weights(
         model= model,
         pretrained_weight= args.pretrained_weight,

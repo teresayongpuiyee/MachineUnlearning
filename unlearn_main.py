@@ -89,13 +89,20 @@ def main(args) -> None:
     device, device_name = utils.device_configuration(args=args)
     logger.info(f"Unlearning scenario: {args.scenario} Dataset: {args.dataset} Unlearn method: {args.unlearn_method} Device: {device}")
 
+    # Get dataset info e.g., classes and channels
+    num_classes, num_channels = dataset.dataset_info(dataset_name= args.dataset)
+
+    # Model preparation
+    model = getattr(models, args.model)(
+        num_classes=num_classes, input_channels=num_channels, pretrained=args.pretrained_timm).to(device)
+    
     # Dataset
-    train_aug_dataset, test_dataset, num_classes, num_channels = dataset.get_dataset(
-        dataset_name=args.dataset, root=args.root
+    train_aug_dataset, test_dataset = dataset.get_dataset(
+        dataset_name=args.dataset, root=args.root, model=model, pretrained_timm= args.pretrained_timm
     )
 
-    train_dataset, _, _, _ = dataset.get_dataset(
-        dataset_name=args.dataset, root=args.root, augment=False
+    train_dataset, _ = dataset.get_dataset(
+        dataset_name=args.dataset, root=args.root, augment=False, model=model, pretrained_timm= args.pretrained_timm
     )
 
     retain_aug_dataset, _ = dataset.split_unlearn_dataset(
@@ -126,8 +133,6 @@ def main(args) -> None:
     unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
 
     # Model preparation
-    model = getattr(models, args.model)(
-        num_classes=num_classes, input_channels=num_channels, pretrained=args.pretrained_timm).to(device)
     unlearning_teacher = getattr(models, args.model)(
         num_classes=num_classes, input_channels=num_channels).to(device)
 

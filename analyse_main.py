@@ -15,6 +15,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "Cifar10",
                              "Cifar100",
                              "TinyImagenet"])
+parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_true", default=False, help="Model trained with pretrained timm")
 # Model
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 # Unlearn configuration
@@ -54,10 +55,15 @@ def main(args) -> None:
     # Device
     device, _ = utils.device_configuration(args=args)
 
+    # Get dataset info e.g., classes and channels
+    num_classes, num_channels = dataset.dataset_info(dataset_name= args.dataset)
+
+    unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+
     # Dataset
     logger.info("Preparing datasets and dataloaders...")
-    train_dataset, _, num_classes, num_channels = dataset.get_dataset(
-        dataset_name=args.dataset, root=args.root, augment=False
+    train_dataset, _ = dataset.get_dataset(
+        dataset_name=args.dataset, root=args.root, augment=False, model=unlearned_model, pretrained_timm= args.pretrained_timm
     )
 
     retain_dataset, unlearn_dataset = dataset.split_unlearn_dataset(
@@ -73,7 +79,6 @@ def main(args) -> None:
     logger.info("Loading model checkpoints...")
     ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-    unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
 
     # load checkpoints
     utils.load_model_weights(ori_model, ori_model_path, device)

@@ -9,17 +9,17 @@ from torch.utils.data import Dataset, Subset
 def get_dataset(
     dataset_name: str,
     root: str,
+    model,
     augment: bool= True,
+    pretrained_timm: bool= False,
 ):
     train_dataset = getattr(raw_dataset, dataset_name)(
-        root= root, train= True, download= True, augment= augment
+        root= root, train= True, download= True, augment= augment, model=model, pretrained_timm= pretrained_timm
     )
     test_dataset = getattr(raw_dataset, dataset_name)(
-        root=root, train= False, download= True
+        root=root, train= False, download= True, model=model, pretrained_timm= pretrained_timm
     )
-    # Get dataset info e.g., classes and channels
-    num_classes, num_channels = dataset_info(dataset_name= dataset_name)
-    return train_dataset, test_dataset, num_classes, num_channels
+    return train_dataset, test_dataset
 
 
 def dataset_info(
