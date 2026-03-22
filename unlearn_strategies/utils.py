@@ -49,10 +49,32 @@ def training_optimization(
 
     if opt not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
-    if opt == "sgd":
-        optimizer = torch.optim.SGD(trained_model.parameters(), lr=lr, momentum= momentum)
+
+    if isinstance(lr, list) and len(lr) == 2:
+        backbone_params = []
+        fc_params = []
+
+        for name, param in trained_model.named_parameters():
+            if name.startswith("fc."):
+                fc_params.append(param)
+            else:
+                backbone_params.append(param)
+        
+        optim_param = [
+            {"params": backbone_params, "lr": lr[0]},
+            {"params": fc_params, "lr": lr[1]}
+        ]
+    elif isinstance(lr, float):
+        optim_param = [
+            {"params": trained_model.parameters(), "lr": lr}
+        ]
     else:
-        optimizer = torch.optim.Adam(trained_model.parameters(), lr=lr, weight_decay=weight_decay)
+        raise ValueError("Invalid learning rate configuration. Accept a float or a list of two floats.")
+
+    if opt == "sgd":
+        optimizer = torch.optim.SGD(optim_param, momentum= momentum)
+    else:
+        optimizer = torch.optim.Adam(optim_param, weight_decay=weight_decay)
 
     if desc == "Retraining model":
         if hasattr(args, "lr_scheduler"):

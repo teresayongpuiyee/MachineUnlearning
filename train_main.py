@@ -139,10 +139,32 @@ if __name__ == "__main__":
 
     if args.optimizer not in ["sgd", "adam"]:
         raise Exception("select correct optimizer")
-    if args.optimizer == "sgd":
-        optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum, weight_decay=args.weight_decay)
+
+    if isinstance(args.lr, list) and len(args.lr) == 2:
+        backbone_params = []
+        fc_params = []
+
+        for name, param in model.named_parameters():
+            if name.startswith("fc."):
+                fc_params.append(param)
+            else:
+                backbone_params.append(param)
+        
+        optim_param = [
+            {"params": backbone_params, "lr": args.lr[0]},
+            {"params": fc_params, "lr": args.lr[1]}
+        ]
+    elif isinstance(args.lr, float):
+        optim_param = [
+            {"params": model.parameters(), "lr": args.lr}
+        ]
     else:
-        optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+        raise ValueError("Invalid learning rate configuration. Accept a float or a list of two floats.")
+
+    if args.optimizer == "sgd":
+        optimizer = torch.optim.SGD(optim_param, momentum=args.momentum, weight_decay=args.weight_decay)
+    else:
+        optimizer = torch.optim.Adam(optim_param, weight_decay=args.weight_decay)
 
     lr_scheduler = scheduler.get_lr_scheduler(
         args.lr_scheduler, 
@@ -214,10 +236,10 @@ if __name__ == "__main__":
         logger.info(f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Train Acc: {train_acc} Test Acc: {test_acc}")
         
         if args.wandb:
-            cur_lr = optimizer.param_groups[0]['lr']
-            metrics_dict.update({
-                "lr": cur_lr,
-            })
+            for i, param_group in enumerate(optimizer.param_groups):
+                metrics_dict.update({
+                    f"lr_{i}": param_group['lr'],
+                })
             wandb.log(metrics_dict)
 
         if args.early_stop:
