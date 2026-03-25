@@ -38,7 +38,7 @@ def main(args) -> None:
     ori_model_path = f"{model_path}/baseline.pt"
     retrain_model_path = f"{model_path}/retrain.pt"
 
-    output_path = f"./{exp_name}/geo_analysis/"
+    output_path = f"./{exp_name}/analyse_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")

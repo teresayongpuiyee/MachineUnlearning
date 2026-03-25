@@ -72,12 +72,14 @@ def main(args) -> None:
         # Convert the final dictionary back to an argparse-like object (Namespace)
         args = argparse.Namespace(**config_dict)
 
-    utils.create_directory_if_not_exists(f"./{exp_name}/outputs/")
+    output_path = f"./{exp_name}/unlearn_outputs/"
 
-    logger = utils.configure_logger(f"./{exp_name}/outputs/unlearn_{args.unlearn_method}.log")
+    utils.create_directory_if_not_exists(output_path)
 
-    OUTPUT_CONFIG_FILE = f"./{exp_name}/outputs/unlearn_{args.unlearn_method}_config.yaml"
-    OUTPUT_METRICS_FILE = f"./{exp_name}/outputs/unlearn_{args.unlearn_method}_metrics.yaml"
+    logger = utils.configure_logger(f"{output_path}unlearn_{args.unlearn_method}.log")
+
+    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{args.unlearn_method}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{args.unlearn_method}_metrics.yaml"
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 

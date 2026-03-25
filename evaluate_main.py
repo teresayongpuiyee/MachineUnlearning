@@ -24,7 +24,6 @@ parser.add_argument("-unlearned_model", type=str, required=True, help="Path to u
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
                     choices=["orthogonal", "parallel", ""])
-parser.add_argument("-logit_mia", dest="logit_mia", action="store_true", default= False, help= "Evaluate logit MIA")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -40,9 +39,9 @@ def main(args) -> None:
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
 
     if len(args.project_method) > 0:
-        output_path = f"./{exp_name}/mia_cka_evaluate_{args.project_method}/"
+        output_path = f"./{exp_name}/evaluate_outputs_{args.project_method}/"
     else:
-        output_path = f"./{exp_name}/mia_cka_evaluate/"
+        output_path = f"./{exp_name}/evaluate_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
@@ -89,7 +88,7 @@ def main(args) -> None:
     cls_metrics_dict = dict()
 
     # Evaluation after unlearning
-    if args.logit_mia:
+    if len(args.project_method) == 0:
         # Classification-level evaluation
         train_enp, train_enp_labels = metrics.get_entropy(train_loader, unlearned_model)
         test_enp, test_enp_labels = metrics.get_entropy(test_loader, unlearned_model)
@@ -246,13 +245,14 @@ def main(args) -> None:
         "sure_miars_asr": sure_miars_asr,
     }
     
-    repr_metrics.visualize_tsne(
-        reps=train_reps,
-        all_labels=train_labels,
-        unlearn_method=unlearn_method,
-        exp_name=exp_name
-    )
-    logger.info("t-SNE visualization saved.")
+    if len(args.project_method) == 0:
+        repr_metrics.visualize_tsne(
+            reps=train_reps,
+            all_labels=train_labels,
+            unlearn_method=unlearn_method,
+            exp_name=exp_name
+        )
+        logger.info("t-SNE visualization saved.")
 
     logger.info(f"Representation similarity evaluation...")
     # CKA
