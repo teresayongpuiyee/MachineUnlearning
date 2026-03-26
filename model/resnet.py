@@ -9,6 +9,7 @@ Source: https://github.com/weiaicunzai/pytorch-cifar100
 """
 import torch
 import torch.nn as nn
+import timm
 
 class BasicBlock(nn.Module):
     """Basic Block for resnet 18 and resnet 34"""
@@ -177,3 +178,18 @@ class ResNet(nn.Module):
         output = self.classifier_head(features)
 
         return output
+
+
+class TimmResNet(nn.Module):
+    def __init__(self, resnet_type = 'resnet18', num_classes=10, pretrained=False):
+        super().__init__()
+        self.model = timm.create_model(resnet_type, pretrained=pretrained)
+        self.model.fc = nn.Linear(self.model.fc.in_features, num_classes)
+
+    def forward(self, x):
+        return self.model(x)
+
+    def feature_extractor(self, x):
+        features = self.model.forward_features(x)
+        pooled = self.model.forward_head(features, pre_logits=True)
+        return pooled

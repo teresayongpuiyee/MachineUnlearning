@@ -4,9 +4,8 @@ Source: https://github.com/weiaicunzai/pytorch-cifar100
 
 from torch import nn
 import torch
-from model.resnet import ResNet, BasicBlock, BottleNeck
+from model.resnet import ResNet, BasicBlock, BottleNeck, TimmResNet
 import torch.nn.functional as F
-import timm
 
 
 def ResNet18(num_classes, input_channels, **kwargs):
@@ -35,12 +34,7 @@ def ResNet152(num_classes, input_channels, **kwargs):
 
 def timm_ResNet18(num_classes, pretrained=False, **kwargs):
     """return a timm ResNet18 object"""
-    # Load pretrained ResNet-18
-    model = timm.create_model('resnet18', pretrained=pretrained)
-
-    model.fc = nn.Linear(model.fc.in_features, num_classes)
-
-    return model
+    return TimmResNet('resnet18', num_classes=num_classes, pretrained=pretrained)
 
 class MLP(nn.Module):
     def __init__(
