@@ -46,7 +46,9 @@ parser.add_argument("-lr_scheduler", type= str, default= "constant",
                         "cosineannealingwarmrestarts",
                         "multisteplr",
                         "reducelronplateau",
-                        "cosineannealing"
+                        "cosineannealing",
+                        "exponential",
+                        "step"
                         ])
 parser.add_argument("-milestones", type= int, nargs='+', default= [10, 20], help= "Steps for lr decay in multisteplr")
 parser.add_argument("-t0", type= int, default= 5, help= "Number of epochs for the first restart in CosineAnnealingWarmRestarts")
