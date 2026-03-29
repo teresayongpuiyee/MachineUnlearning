@@ -36,6 +36,7 @@ parser.add_argument("-lr", type=float, nargs='+', default= [1e-4], help='Learnin
 parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "adam"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
+parser.add_argument("-nesterov", dest="nesterov", action="store_true", default=False, help="SGD nesterov momentum")
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
@@ -53,6 +54,8 @@ parser.add_argument('-lr_patience', type=int, default=5, help='Learning plateau 
 parser.add_argument('-lr_gamma', type=float, default=0.1, help='Learning rate decay factor')
 parser.add_argument('-lr_factor', type=float, default=0.1, help='Learning rate factor for ReduceLROnPlateau')
 parser.add_argument('-warm', type=int, default=0, help='Warm up training phase')
+parser.add_argument("-lr_step_size", type= int, default= 15, help= "Step size for StepLR")
+parser.add_argument('-min_lr', type=float, default=1e-6, help='Minimum learning rate')
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
 parser.add_argument('-es_patience', type=int, default=10, help='Early stopping patience')
@@ -168,7 +171,7 @@ if __name__ == "__main__":
         raise ValueError("Invalid learning rate configuration. Accept a list of one or two floats.")
 
     if args.optimizer == "sgd":
-        optimizer = torch.optim.SGD(optim_param, momentum=args.momentum, weight_decay=args.weight_decay)
+        optimizer = torch.optim.SGD(optim_param, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=args.nesterov)
     else:
         optimizer = torch.optim.Adam(optim_param, weight_decay=args.weight_decay)
 
@@ -180,7 +183,9 @@ if __name__ == "__main__":
         t0=args.t0,
         lr_patience=args.lr_patience,
         lr_gamma=args.lr_gamma,
-        lr_factor=args.lr_factor
+        lr_factor=args.lr_factor,
+        lr_step_size=args.lr_step_size,
+        min_lr=args.min_lr
     )
 
     if args.warm > 0:

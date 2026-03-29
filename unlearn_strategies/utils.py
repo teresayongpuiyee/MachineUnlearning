@@ -26,6 +26,7 @@ def training_optimization(
     lr: float = 1e-4,
     momentum: float = 0.5,
     weight_decay: float = 1e-4,
+    nesterov: bool = False
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -36,6 +37,8 @@ def training_optimization(
         lr = args.lr
         momentum = args.momentum
         weight_decay = args.weight_decay
+        if hasattr(args, "nesterov"):
+            nesterov = args.nesterov
         best_test_loss = float('inf')
         best_test_acc = -float('inf')
         patience_counter = 0
@@ -77,7 +80,7 @@ def training_optimization(
         raise ValueError("Invalid learning rate configuration. Accept a float or a list of at most two floats.")
 
     if opt == "sgd":
-        optimizer = torch.optim.SGD(optim_param, momentum= momentum)
+        optimizer = torch.optim.SGD(optim_param, momentum= momentum, weight_decay=weight_decay, nesterov=nesterov)
     else:
         optimizer = torch.optim.Adam(optim_param, weight_decay=weight_decay)
 
@@ -91,7 +94,9 @@ def training_optimization(
                 t0=args.t0,
                 lr_patience=args.lr_patience,
                 lr_gamma=args.lr_gamma,
-                lr_factor=args.lr_factor
+                lr_factor=args.lr_factor,
+                lr_step_size=args.lr_step_size,
+                min_lr=args.min_lr
             )
         else:
             lr_scheduler = None

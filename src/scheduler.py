@@ -19,17 +19,23 @@ def get_lr_scheduler(scheduler_type: str, optimizer, **kwargs):
     lr_patience = kwargs.pop('lr_patience')
     lr_gamma = kwargs.pop('lr_gamma')
     lr_factor = kwargs.pop('lr_factor')
+    lr_step_size = kwargs.pop('lr_step_size')
+    min_lr = kwargs.pop('min_lr')
 
     if scheduler_type == "constant":
         return None
     elif scheduler_type == "cosineannealingwarmrestarts":
-        return lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=t0, eta_min=1e-6)
+        return lr_scheduler.CosineAnnealingWarmRestarts(optimizer, T_0=t0, eta_min=min_lr)
     elif scheduler_type == "multisteplr":
         return lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=lr_gamma)
     elif scheduler_type == "reducelronplateau":
-        return lr_scheduler.ReduceLROnPlateau(optimizer, factor=lr_factor, patience=lr_patience, min_lr=1e-6)
+        return lr_scheduler.ReduceLROnPlateau(optimizer, factor=lr_factor, patience=lr_patience, min_lr=min_lr)
     elif scheduler_type == "cosineannealing":
-        return lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=1e-6)
+        return lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs, eta_min=min_lr)
+    elif scheduler_type == "exponential":
+        return lr_scheduler.ExponentialLR(optimizer, gamma=lr_gamma)
+    elif scheduler_type == "step":
+        return lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_gamma)
     else:
         raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 
