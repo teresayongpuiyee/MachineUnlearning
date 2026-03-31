@@ -23,7 +23,7 @@ def accuracy(outputs, labels):
 
 def validation_step(model, batch, device):
     images, clabels = batch
-    images, clabels = images.to(device), clabels.long().to(device)
+    images, clabels = images.to(device, non_blocking=True), clabels.long().to(device, non_blocking=True)
     out = model(images)  # Generate predictions
     loss = F.cross_entropy(out, clabels)  # Calculate loss
     acc = accuracy(out, clabels)  # Calculate accuracy
@@ -104,7 +104,7 @@ def collect_prob(
 ):
 
     data_loader = DataLoader(
-        data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False
+        data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True
     )
     prob = []
     all_labels = []

@@ -254,9 +254,9 @@ class TinyImagenet(Dataset):
 
     def _prepare_data(self):
         if self.train:
-            dataset_dir = f"{self.root}/tiny-imagenet-200/train"
+            dataset_dir = f"{self.root}/tiny-imagenet-200-raw/train"
         else:
-            dataset_dir = f"{self.root}/tiny-imagenet-200/preprocessed_val"
+            dataset_dir = f"{self.root}/tiny-imagenet-200-raw/preprocessed_val"
 
         return datasets.ImageFolder(root=dataset_dir)
 

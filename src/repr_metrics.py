@@ -25,7 +25,7 @@ def get_representations(
 ):
     model.eval()
     loader = DataLoader(
-        loader.dataset, batch_size=loader.batch_size, shuffle=False
+        loader.dataset, batch_size=loader.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True
     )
     reps = []
     all_labels = []

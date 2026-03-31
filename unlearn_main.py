@@ -125,17 +125,17 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True)
-    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True)
+    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True)
-    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True)
-    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
 
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
-    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False)
-    retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False)
-    unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
+    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
+    retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
+    unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
 
     # Model preparation
     unlearning_teacher = getattr(models, args.model)(
