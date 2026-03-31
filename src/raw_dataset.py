@@ -4,6 +4,9 @@ from torch.utils.data import Dataset
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
 from PIL import Image
+from concurrent.futures import ThreadPoolExecutor
+import os
+import numpy as np
 
 
 CIFAR_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
@@ -236,14 +239,18 @@ class TinyImagenet(Dataset):
             ])
             
         if self.cache:
-            self.cached_imgs = []
-            self.labels = []
-            
             print("Caching raw images into RAM...")
-            for path, label in self.dataset.samples:
+    
+            paths, self.labels = zip(*self.dataset.samples)
+            self.labels = list(self.labels)
+            
+            def load_image(path):
                 img = Image.open(path).convert("RGB")
-                self.cached_imgs.append(img.copy())
-                self.labels.append(label)
+                return np.array(img, dtype=np.uint8)  # H x W x C
+            
+            workers = min(32, (os.cpu_count() or 1) * 4)
+            with ThreadPoolExecutor(max_workers=workers) as executor:
+                self.cached_imgs = list(executor.map(load_image, paths))
 
     def _prepare_data(self):
         if self.train:
@@ -258,7 +265,7 @@ class TinyImagenet(Dataset):
 
     def __getitem__(self, idx):
         if self.cache:
-            img = self.cached_imgs[idx]
+            img = Image.fromarray(self.cached_imgs[idx])  # back to PIL for transforms
             label = self.labels[idx]
         else:
             img, label = self.dataset[idx]
