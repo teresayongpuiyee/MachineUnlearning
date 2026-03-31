@@ -113,8 +113,8 @@ def training_optimization(
         loss_list = []
         trained_model.train()
         for images, labels in train_loader:
-            images = images.to(device)
-            labels = labels.long().to(device)
+            images = images.to(device, non_blocking=True)
+            labels = labels.long().to(device, non_blocking=True)
 
             trained_model.zero_grad()
             output = trained_model(images)

@@ -3,6 +3,7 @@ from torchvision.datasets import CIFAR100, CIFAR10, MNIST, FashionMNIST
 from torch.utils.data import Dataset
 from timm.data import resolve_data_config
 from timm.data.transforms_factory import create_transform
+from PIL import Image
 
 
 CIFAR_MEAN = (0.5070751592371323, 0.48654887331495095, 0.4409178433670343)
@@ -208,48 +209,59 @@ class TinyImagenet(Dataset):
         self,
         root: str,
         train: bool,
-        download: bool,
         augment: bool = True,
         img_size: int = 64,
+        cache: bool = True,
         **kwargs,
     ):
         self.root = root
         self.train = train
         self.augment= augment
         self.img_size = img_size
-        self.data = self._prepare_data()
-
-    def _prepare_data(self):
-        if self.train:
-            if self.augment:
-                transform = transforms.Compose([
-                    transforms.Resize(self.img_size),
-                    transforms.RandomHorizontalFlip(),
-                    transforms.RandomRotation(15),
-                    transforms.ToTensor(),
-                    transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
-                ])
-            else:
-                transform = transforms.Compose([
-                    transforms.Resize(self.img_size),
-                    transforms.ToTensor(),
-                    transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
-                ])
-            dataset_dir = f"{self.root}/tiny-imagenet-200/train"
-        else:
-            transform = transforms.Compose([
-                transforms.Resize(self.img_size),
+        self.cache = cache
+        
+        self.dataset = self._prepare_data()
+        
+        if self.train and self.augment:
+            self.transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomCrop(self.img_size, padding=4),
                 transforms.ToTensor(),
                 transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
             ])
+        else:
+            self.transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+            ])
+            
+        if self.cache:
+            self.cached_imgs = []
+            self.labels = []
+            
+            print("Caching raw images into RAM...")
+            for path, label in self.dataset.samples:
+                img = Image.open(path).convert("RGB")
+                self.cached_imgs.append(img.copy())
+                self.labels.append(label)
+
+    def _prepare_data(self):
+        if self.train:
+            dataset_dir = f"{self.root}/tiny-imagenet-200/train"
+        else:
             dataset_dir = f"{self.root}/tiny-imagenet-200/preprocessed_val"
 
-        dataset = datasets.ImageFolder(root=dataset_dir, transform=transform)
-        return dataset
+        return datasets.ImageFolder(root=dataset_dir)
 
     def __len__(self):
-        return len(self.data)
+        return len(self.dataset)
 
     def __getitem__(self, idx):
-        x, y = self.data[idx]
-        return x, y
+        if self.cache:
+            img = self.cached_imgs[idx]
+            label = self.labels[idx]
+        else:
+            img, label = self.dataset[idx]
+
+        img = self.transform(img)
+        return img, label

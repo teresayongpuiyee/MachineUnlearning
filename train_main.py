@@ -137,8 +137,22 @@ if __name__ == "__main__":
         dataset_name= args.dataset, root= args.root, model=model, pretrained_timm= args.pretrained_timm
     )
 
-    train_loader = DataLoader(train_dataset, batch_size= args.batch_size, shuffle= True)
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle= False)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size= args.batch_size, 
+        shuffle= True,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True
+    )
+    test_loader = DataLoader(
+        test_dataset, 
+        batch_size=args.batch_size, 
+        shuffle= False,
+        num_workers=8,
+        pin_memory=True,
+        persistent_workers=True
+    )
 
     # Load pretrained weights if provided
     model = utils.load_pretrained_weights(
@@ -223,8 +237,8 @@ if __name__ == "__main__":
         loss_list = []
         model.train()
         for images, labels in train_loader:
-            images = images.to(device)
-            labels = labels.long().to(device)
+            images = images.to(device, non_blocking=True)
+            labels = labels.long().to(device, non_blocking=True)
 
             model.zero_grad()
             output = model(images)

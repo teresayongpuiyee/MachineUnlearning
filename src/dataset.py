@@ -4,6 +4,9 @@ from torch.utils.data import ConcatDataset, random_split
 from tqdm import tqdm
 from src import raw_dataset
 from torch.utils.data import Dataset, Subset
+from tinyimagenet import TinyImageNet
+from pathlib import Path
+from torchvision import transforms
 
 
 def get_dataset(
@@ -13,12 +16,30 @@ def get_dataset(
     augment: bool= True,
     pretrained_timm: bool= False,
 ):
-    train_dataset = getattr(raw_dataset, dataset_name)(
-        root= root, train= True, download= True, augment= augment, model=model, pretrained_timm= pretrained_timm
-    )
-    test_dataset = getattr(raw_dataset, dataset_name)(
-        root=root, train= False, download= True, model=model, pretrained_timm= pretrained_timm
-    )
+    if dataset_name == "TinyImagenet":
+        IMAGENET_MEAN = (0.485, 0.456, 0.406)
+        IMAGENET_STD = (0.229, 0.224, 0.225)
+
+        train_transform = transforms.Compose([
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomCrop(64, padding=4),
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+            ])
+        
+        test_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
+            ])
+        train_dataset = TinyImageNet(Path(f"{root}/"), split="train", transform=train_transform, imagenet_idx=False)
+        test_dataset = TinyImageNet(Path(f"{root}/"), split="val", transform=test_transform, imagenet_idx=False)
+    else:
+        train_dataset = getattr(raw_dataset, dataset_name)(
+            root= root, train= True, download= True, augment= augment, model=model, pretrained_timm= False
+        )
+        test_dataset = getattr(raw_dataset, dataset_name)(
+            root=root, train= False, download= True, model=model, pretrained_timm= False
+        )
     return train_dataset, test_dataset
 
 
