@@ -740,7 +740,12 @@ def pour_distill(
     weight_decay = 0,
     scheduler_type = "constant",
     milestones = [10, 20],
-    t0 = 5
+    t0 = 5,
+    lr_patience = 5,
+    lr_gamma = 0.1,
+    lr_factor = 0.1,
+    lr_step_size = 15,
+    min_lr = 1e-6
 ):
     if optimizer not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
@@ -754,7 +759,12 @@ def pour_distill(
         optimizer, 
         milestones=milestones, 
         epochs=epochs, 
-        t0=t0
+        t0=t0,
+        lr_patience=lr_patience,
+        lr_gamma=lr_gamma,
+        lr_factor=lr_factor,
+        lr_step_size=lr_step_size,
+        min_lr=min_lr
     )
 
     for epoch in tqdm(range(1, epochs + 1), desc= "Fine-tuning POUR-D"):
@@ -763,8 +773,8 @@ def pour_distill(
 
         for x, y in unlearn_loader:
 
-            x = x.to(device)
-            y = y.to(device)
+            x = x.to(device, non_blocking=True)
+            y = y.to(device, non_blocking=True)
 
             optimizer.zero_grad()
 
