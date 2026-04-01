@@ -817,7 +817,7 @@ def pour_d(
     pour_d_model.eval()
     
     x, _ = next(iter(unlearn_loader))
-    x = x.to(device)
+    x = x.to(device, non_blocking=True)
 
     with torch.no_grad():
         feat = pour_d_model.feature_extractor(x)
