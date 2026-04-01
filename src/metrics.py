@@ -104,7 +104,7 @@ def collect_prob(
 ):
 
     data_loader = DataLoader(
-        data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True
+        data_loader.dataset, batch_size=data_loader.batch_size, shuffle=False, num_workers=data_loader.num_workers, pin_memory=True, persistent_workers=True
     )
     prob = []
     all_labels = []

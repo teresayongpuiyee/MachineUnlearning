@@ -22,6 +22,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "Cifar10",
                              "Cifar100",
                              "TinyImagenet"])
+parser.add_argument("-num_workers", type= int, default= 2, help= "Number of worker threads for data loading")
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Model root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
@@ -141,7 +142,7 @@ if __name__ == "__main__":
         train_dataset, 
         batch_size= args.batch_size, 
         shuffle= True,
-        num_workers=8,
+        num_workers=args.num_workers,
         pin_memory=True,
         persistent_workers=True
     )
@@ -149,7 +150,7 @@ if __name__ == "__main__":
         test_dataset, 
         batch_size=args.batch_size, 
         shuffle= False,
-        num_workers=8,
+        num_workers=args.num_workers,
         pin_memory=True,
         persistent_workers=True
     )

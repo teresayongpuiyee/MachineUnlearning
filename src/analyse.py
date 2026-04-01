@@ -15,7 +15,7 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
     total_count = 0
 
     for x, _ in tqdm(dataloader):
-        x = x.to(device)
+        x = x.to(device, non_blocking=True)
         total_count += x.size(0)
 
         # Extract features for all three models

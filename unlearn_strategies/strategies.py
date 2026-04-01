@@ -90,7 +90,7 @@ def gradient_ascent(
     for epoch in tqdm(range(1, epochs + 1), desc= "Gradient ascent unlearning"):
         loss_list = []
         for images, labels in unlearn_loader:
-            images, labels= images.to(device), labels.long().to(device)
+            images, labels= images.to(device, non_blocking=True), labels.long().to(device, non_blocking=True)
             unlearned_model.zero_grad()
             output = unlearned_model(images)
             # gradient ascent loss
@@ -137,6 +137,7 @@ def bad_teacher(
         batch_size=256,
         device=device,
         KL_temperature=KL_temperature,
+        num_workers= unlearn_loader.num_workers
     )
 
     return student_model
@@ -190,11 +191,17 @@ def scrub(
     criterion_list.append(criterion_div)  # KL divergence loss, original knowledge distillation
     criterion_list.append(criterion_kd)  # other knowledge distillation loss
 
-    optimizer = torch.optim.SGD(
-        trainable_list.parameters(),
-        lr= sgda_learning_rate,
-        momentum= sgda_momentum,
-        weight_decay= sgda_weight_decay)
+    if optim == "sgd":
+        optimizer = torch.optim.SGD(
+            trainable_list.parameters(),
+            lr= sgda_learning_rate,
+            momentum= sgda_momentum,
+            weight_decay= sgda_weight_decay)
+    elif optim == "adam":
+        optimizer = torch.optim.Adam(
+            trainable_list.parameters(),
+            lr= sgda_learning_rate,
+            weight_decay= sgda_weight_decay)
 
     module_list.append(model_t)
 
@@ -270,7 +277,7 @@ def amnesiac(
         unlearning_trainset.append((x, y))
 
     unlearning_train_set_dl = DataLoader(
-        unlearning_trainset, 64, pin_memory=True, shuffle=True
+        unlearning_trainset, 64, pin_memory=True, shuffle=True, num_workers=unlearn_loader.num_workers, persistent_workers=True
     )
 
     unlearned_model = utils.training_optimization(
@@ -330,8 +337,8 @@ def boundary(
     for itr in tqdm(range(poison_epoch * batches_per_epoch)):
 
         x, y = forget_data_gen.__next__()
-        x = x.to(device)
-        y = y.to(device)
+        x = x.to(device, non_blocking=True)
+        y = y.to(device, non_blocking=True)
         test_model.eval()
         x_adv = adv.perturb(x, y, target_y=None, model=test_model, device=device)
         adv_logits = test_model(x_adv)
@@ -656,7 +663,7 @@ def unsir(
         ConcatDataset((retain_loader.dataset, unlearn_loader.dataset)), num_classes
     )
     noise_batch_size = 256
-    retain_valid_dl = DataLoader(test_retain_loader.dataset, batch_size=noise_batch_size)
+    retain_valid_dl = DataLoader(test_retain_loader.dataset, batch_size=noise_batch_size, num_workers=test_retain_loader.num_workers, pin_memory=True, persistent_workers=True)
     # collect some samples from each class
     num_samples = 1000
     retain_samples = []
@@ -675,6 +682,7 @@ def unsir(
         forget_class_label,
         retain_samples,
         batch_size=noise_batch_size,
+        num_workers=unlearn_loader.num_workers,
         device=device
     )
     # impair step
@@ -701,7 +709,7 @@ def unsir(
         )
 
     heal_loader = torch.utils.data.DataLoader(
-        other_samples, batch_size=256, shuffle=True
+        other_samples, batch_size=256, shuffle=True, num_workers=retain_loader.num_workers, pin_memory=True, persistent_workers=True
     )
     model = utils.training_optimization(
         logger,

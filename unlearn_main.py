@@ -18,6 +18,7 @@ parser.add_argument("-dataset", type= str, help= "Dataset configuration",
                              "Cifar10",
                              "Cifar100",
                              "TinyImagenet"])
+parser.add_argument("-num_workers", type= int, default= 2, help= "Number of worker threads for data loading")
 # Model
 parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Dataset root directory")
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
@@ -125,17 +126,17 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
-    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
-    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
-    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True, num_workers=8, pin_memory=True, persistent_workers=True)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
-    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
-    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
-    retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
-    unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=8, pin_memory=True, persistent_workers=True)
+    test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    retain_eval_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    unlearn_eval_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
     # Model preparation
     unlearning_teacher = getattr(models, args.model)(

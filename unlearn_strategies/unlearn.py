@@ -51,7 +51,7 @@ def unlearning_step(
     losses = []
     for batch in unlearn_data_loader:
         x, y = batch
-        x, y = x.to(device), y.to(device)
+        x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
         with torch.no_grad():
             full_teacher_logits = full_trained_teacher(x)
             unlearn_teacher_logits = unlearning_teacher(x)
@@ -83,11 +83,12 @@ def blindspot_unlearner(
     batch_size=256,
     device="cuda",
     KL_temperature=1,
+    num_workers=2
 ):
     # creating the unlearning dataset.
     unlearning_data = dataset.UnLearningData(forget_data=forget_data, retain_data=retain_data)
     unlearning_loader = DataLoader(
-        unlearning_data, batch_size=batch_size, shuffle=True, pin_memory=True
+        unlearning_data, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers, persistent_workers=True
     )
 
     unlearning_teacher.eval()
@@ -150,6 +151,7 @@ def UNSIR_create_noisy_loader(
     retain_samples,
     batch_size,
     num_noise_batches=20,
+    num_workers=2,
     device="cuda",
 ):
     noisy_data = []
@@ -171,7 +173,7 @@ def UNSIR_create_noisy_loader(
             )
         )
     noisy_data += other_samples
-    noisy_loader = DataLoader(noisy_data, batch_size=batch_size, shuffle=True)
+    noisy_loader = DataLoader(noisy_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True)
 
     return noisy_loader
 
