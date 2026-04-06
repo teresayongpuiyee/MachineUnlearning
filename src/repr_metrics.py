@@ -536,6 +536,9 @@ def visualize_tsne(
     if reps.shape[1] > 50:
         reps = PCA(n_components=50, random_state=42).fit_transform(reps)
 
+    # Adaptive perplexity
+    perplexity = min(perplexity, max(5, len(reps) // 100))
+
     # Fast t-SNE using openTSNE
     tsne = TSNE(
         n_components=2,
@@ -549,28 +552,53 @@ def visualize_tsne(
 
     # Ensure consistent color mapping: map each label to a specific color
     unique_labels = np.unique(all_labels)
-    cmap_name = 'tab10' if len(unique_labels) <= 10 else 'tab20'
-    base_cmap = plt.get_cmap(cmap_name)
-    color_list = [base_cmap(i % base_cmap.N) for i in range(len(unique_labels))]
-    label_to_color_idx = {label: idx for idx, label in enumerate(unique_labels)}
-    color_indices = np.array([label_to_color_idx[label] for label in all_labels])
-    custom_cmap = mcolors.ListedColormap(color_list)
+    unique_labels_sorted = np.sort(unique_labels)
+
+    # Map label -> stable index
+    label_to_idx = {label: i for i, label in enumerate(unique_labels_sorted)}
+    color_indices = np.array([label_to_idx[l] for l in all_labels])
+
+    num_classes = len(unique_labels_sorted)
+
+    # Use large continuous colormap
+    cmap = plt.get_cmap("gist_ncar")
+
+    # Normalize indices to [0,1]
+    norm = mcolors.Normalize(vmin=0, vmax=num_classes - 1)
 
     # Plot
     plt.figure(figsize=(8, 6))
-    scatter = plt.scatter(reps_2d[:, 0], reps_2d[:, 1], c=color_indices, cmap=custom_cmap, alpha=0.7)
+
+    scatter = plt.scatter(
+        reps_2d[:, 0],
+        reps_2d[:, 1],
+        c=color_indices,
+        cmap=cmap,
+        norm=norm,
+        s=8,
+        alpha=0.7,
+    )
+    
     plt.title(f"t-SNE Visualization - {unlearn_method}")
     plt.xlabel('t-SNE 1')
     plt.ylabel('t-SNE 2')
-    cbar = plt.colorbar(scatter, ticks=range(len(unique_labels)), label='Label')
-    cbar.ax.set_yticklabels([str(l) for l in unique_labels])
+    
+    if num_classes <= 20:
+        cbar = plt.colorbar(scatter)
+        cbar.set_ticks(range(num_classes))
+        cbar.set_ticklabels(unique_labels_sorted)
+    else:
+        # Avoid clutter
+        pass
+    
     plt.tight_layout()
 
     # Save figure
     save_path = "/".join([".", exp_name, "visualize"])
     os.makedirs(save_path, exist_ok=True)
+    
     plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
-    plt.show()
+    plt.close()
 
 def linear_cka(X, Y, eps=1e-8):
     """
