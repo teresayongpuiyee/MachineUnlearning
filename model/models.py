@@ -36,6 +36,10 @@ def timm_ResNet18(num_classes, pretrained=False, **kwargs):
     """return a timm ResNet18 object"""
     return TimmResNet('resnet18', num_classes=num_classes, pretrained=pretrained)
 
+def timm_ResNet101(num_classes, pretrained=False, **kwargs):
+    """return a timm ResNet101 object"""
+    return TimmResNet('resnet101', num_classes=num_classes, pretrained=pretrained)
+
 class MLP(nn.Module):
     def __init__(
         self,
