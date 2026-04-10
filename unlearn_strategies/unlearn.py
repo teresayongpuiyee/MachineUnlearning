@@ -5,6 +5,7 @@ import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, dataset
 from src import dataset, scheduler, metrics
+from unlearn_strategies import utils
 import numpy as np
 import torch.distributions as distributions
 from torch import nn
@@ -695,16 +696,15 @@ def train_distill(
         return kd_losses.avg
 
 class POUR_P(nn.Module):
-    def __init__(self, feature_extractor, fc, unlearn_class: int):
+    def __init__(self, model, unlearn_class: int):
         super().__init__()
-        self.ori_feature_extractor = feature_extractor
-        self.fc = fc
-        
-        w_c = fc.weight[unlearn_class].detach() # (D,)
+        self.model = model
+
+        w_c = utils.get_fc(model).weight[unlearn_class].detach() # (D,)
         self.register_buffer("unit_w_c", F.normalize(w_c, dim=0))
 
     def feature_extractor(self, x):
-        feat = self.ori_feature_extractor(x)
+        feat = self.model.feature_extractor(x)
         feat = torch.flatten(feat, 1)  # (N,D)
 
         # scalar projection onto direction
@@ -718,7 +718,7 @@ class POUR_P(nn.Module):
     
     def classifier_head(self, x):
         x = x.view(x.size(0), -1)
-        x = self.fc(x)
+        x = utils.get_fc(self.model)(x)
         return x
 
     def forward(self, x):

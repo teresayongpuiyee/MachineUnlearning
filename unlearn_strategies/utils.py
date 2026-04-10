@@ -205,3 +205,11 @@ def save_model(
     create_directory_if_not_exists(file_path=model_folder)
     model_path = f"{model_folder}{model_name}_{train_acc}_{test_acc}.pt"
     torch.save(model.state_dict(), model_path)
+
+def get_fc(module):
+    if hasattr(module, "fc"):
+        return module.fc
+    elif hasattr(module, "model") and hasattr(module.model, "fc"):
+        return module.model.fc
+    else:
+        raise AttributeError("Cannot find fc layer")

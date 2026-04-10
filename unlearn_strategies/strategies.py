@@ -772,10 +772,8 @@ def pour_p(
     device: torch.device,
     **kwargs,
 ) -> torch.nn.Module:
-    fc_layer = getattr(model, "fc", None) or getattr(getattr(model, "model", None), "fc", None)
     pour_p_model = unlearn.POUR_P(
-        copy.deepcopy(model.feature_extractor), 
-        copy.deepcopy(fc_layer), 
+        copy.deepcopy(model), 
         unlearn_class
     ).to(device)
     return pour_p_model
@@ -789,10 +787,8 @@ def pour_d(
     device: torch.device,
     **kwargs,
 ) -> torch.nn.Module:
-    fc_layer = getattr(model, "fc", None) or getattr(getattr(model, "model", None), "fc", None)
     teacher_model = unlearn.POUR_P(
-        copy.deepcopy(model.feature_extractor), 
-        copy.deepcopy(fc_layer), 
+        copy.deepcopy(model), 
         unlearn_class
     ).to(device)
 
@@ -804,7 +800,7 @@ def pour_d(
         p.requires_grad = False
 
     # Freeze student classifier head
-    for p in student_model.fc.parameters():
+    for p in utils.get_fc(student_model).parameters():
         p.requires_grad = False
     
     pour_d_model = unlearn.pour_distill(
@@ -825,7 +821,7 @@ def pour_d(
         feat = pour_d_model.feature_extractor(x)
         feat = torch.flatten(feat,1)
     
-    w_c = pour_d_model.fc.weight[unlearn_class]
+    w_c = utils.get_fc(pour_d_model).weight[unlearn_class]
 
     dot = (feat @ w_c).abs().mean()
     
