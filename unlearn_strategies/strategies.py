@@ -772,9 +772,10 @@ def pour_p(
     device: torch.device,
     **kwargs,
 ) -> torch.nn.Module:
+    fc_layer = getattr(model, "fc", None) or getattr(getattr(model, "model", None), "fc", None)
     pour_p_model = unlearn.POUR_P(
         copy.deepcopy(model.feature_extractor), 
-        copy.deepcopy(model.fc), 
+        copy.deepcopy(fc_layer), 
         unlearn_class
     ).to(device)
     return pour_p_model
@@ -788,9 +789,10 @@ def pour_d(
     device: torch.device,
     **kwargs,
 ) -> torch.nn.Module:
+    fc_layer = getattr(model, "fc", None) or getattr(getattr(model, "model", None), "fc", None)
     teacher_model = unlearn.POUR_P(
         copy.deepcopy(model.feature_extractor), 
-        copy.deepcopy(model.fc), 
+        copy.deepcopy(fc_layer), 
         unlearn_class
     ).to(device)
 
