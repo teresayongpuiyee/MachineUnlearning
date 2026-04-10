@@ -153,12 +153,12 @@ def scrub(
 ) -> torch.nn.Module:
 
     # Parameters
-    optim = 'sgd'
-    gamma = 0.99
-    alpha = 0.001
+    optim = 'adam'
+    gamma = 1
+    alpha = 0.5
     beta = 0
     smoothing = 0.0
-    msteps = 2
+    msteps = 5
     clip = 0.2
     sstart = 10
     kd_T = 4
@@ -166,9 +166,9 @@ def scrub(
 
     sgda_batch_size = 128
     del_batch_size = 32
-    sgda_epochs = 3
+    sgda_epochs = 5
     sgda_learning_rate = 0.0005
-    lr_decay_epochs = [3, 5, 9]
+    lr_decay_epochs = [2]
     lr_decay_rate = 0.1
     sgda_weight_decay = 5e-4
     sgda_momentum = 0.9
@@ -235,6 +235,8 @@ def scrub(
                 alpha= alpha,
                 beta= beta,
                 split= "maximize")
+        if epoch == msteps:
+            break
         train_acc, train_loss = train_distill(
             logger=logger,
             epoch= epoch,
@@ -285,10 +287,10 @@ def amnesiac(
         model= model, 
         train_loader= unlearning_train_set_dl,
         test_loader= test_loader,
-        epochs= 5,
+        epochs= 3,
         device= device,
         desc= "Amnesiac unlearning",
-        lr = 0.001,
+        lr = 0.0001,
         weight_decay= 0.0,
     )
     
@@ -306,7 +308,7 @@ def boundary(
     # Boundary Shrink
     # Hyperparameter
     bound = 0.1
-    poison_epoch = 10
+    poison_epoch = 5
     extra_exp = None
     lambda_ = 0.7
     bias = -0.5
@@ -662,10 +664,10 @@ def unsir(
     classwise_train = unlearn.get_classwise_ds(
         ConcatDataset((retain_loader.dataset, unlearn_loader.dataset)), num_classes
     )
-    noise_batch_size = 256
+    noise_batch_size = 16
     retain_valid_dl = DataLoader(test_retain_loader.dataset, batch_size=noise_batch_size, num_workers=test_retain_loader.num_workers, pin_memory=True, persistent_workers=True)
     # collect some samples from each class
-    num_samples = 1000
+    num_samples = 450
     retain_samples = []
     for i in range(num_classes):
         if i != unlearn_class:
@@ -675,7 +677,7 @@ def unsir(
     img_shape = next(iter(retain_loader.dataset))[0].shape[-1]
     noise = unlearn.UNSIR_noise(noise_batch_size, num_channels, img_shape, img_shape).to(device)
     noise = unlearn.UNSIR_noise_train(
-        logger, noise, model, forget_class_label, 40, noise_batch_size, device=device
+        logger, noise, model, forget_class_label, 20, noise_batch_size, device=device
     )
     noisy_loader = unlearn.UNSIR_create_noisy_loader(
         noise,
@@ -689,13 +691,14 @@ def unsir(
     model = utils.training_optimization(
         logger,
         model= model, 
-        epochs= 1,
+        epochs= 6,
         train_loader= noisy_loader, 
         test_loader= retain_valid_dl,
         opt= "adam",
         device=device,
         desc= "UNSIR impair step",
-        lr = 0.02,
+        lr = 0.003,
+        momentum = 0.9,
         weight_decay= 0.0,
     )
     # repair step
@@ -714,13 +717,14 @@ def unsir(
     model = utils.training_optimization(
         logger,
         model= model, 
-        epochs= 1,
+        epochs= 8,
         train_loader= heal_loader, 
         test_loader= retain_valid_dl,
         opt= "adam",
         device=device, 
         desc= "UNSIR repair step",
-        lr = 0.01,
+        lr = 0.008,
+        momentum = 0.9,
         weight_decay= 0.0,
     )
 
@@ -745,7 +749,7 @@ def ssd(
         "max_layer": -1,  # -1: all layers are available for modification
         "forget_threshold": 1,  # unused
         "dampening_constant": 1,  # Lambda from paper
-        "selection_weighting": 10,  # Alpha from paper
+        "selection_weighting": 50,  # Alpha from paper
     }
 
     # load the trained model

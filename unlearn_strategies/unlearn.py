@@ -127,14 +127,14 @@ class UNSIR_noise(torch.nn.Module):
 def UNSIR_noise_train(
     logger, noise, model, forget_class_label, num_epochs, noise_batch_size, device="cuda"
 ):
-    opt = torch.optim.Adam(noise.parameters(), lr=0.1)
+    opt = torch.optim.Adam(noise.parameters(), lr=0.01)
 
     for epoch in range(num_epochs):
         total_loss = []
         inputs = noise()
         labels = torch.zeros(noise_batch_size).to(device) + forget_class_label
         outputs = model(inputs)
-        loss = -F.cross_entropy(outputs, labels.long()) + 0.1 * torch.mean(
+        loss = -F.cross_entropy(outputs, labels.long()) + 0.2 * torch.mean(
             torch.sum(inputs**2, [1, 2, 3])
         )
         opt.zero_grad()
@@ -152,7 +152,7 @@ def UNSIR_create_noisy_loader(
     forget_class_label,
     retain_samples,
     batch_size,
-    num_noise_batches=20,
+    num_noise_batches=15,
     num_workers=2,
     device="cuda",
 ):
