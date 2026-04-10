@@ -2,8 +2,10 @@ from src import utils
 import argparse
 from src import dataset, metrics, repr_metrics, analyse
 from model import models
+from unlearn_strategies import unlearn
 from torch.utils.data import DataLoader
 import yaml
+import copy
 
 parser = argparse.ArgumentParser()
 # Device
@@ -65,6 +67,12 @@ def main(args) -> None:
     num_classes, num_channels = dataset.dataset_info(dataset_name= args.dataset)
 
     unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+    
+    if unlearn_method == "pour_p":
+        unlearned_model = unlearn.POUR_P(
+            copy.deepcopy(unlearned_model), 
+            args.unlearn_class
+        ).to(device)
     
     # Dataset
     logger.info("Preparing datasets and dataloaders...")
