@@ -174,7 +174,7 @@ def scrub_rep_mia(
         X_full,
         y_full,
         X_labels,
-        test_size=0.2,
+        test_size=0.25,
         stratify=strat_key,   # Stratify using the combined key
         random_state=42
     )
