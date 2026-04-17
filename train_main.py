@@ -38,6 +38,7 @@ parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-nesterov", dest="nesterov", action="store_true", default=False, help="SGD nesterov momentum")
+parser.add_argument('-label_smoothing', type=float, default=0.0, help='Label smoothing factor')
 parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
@@ -213,7 +214,7 @@ if __name__ == "__main__":
     else:
         warmup_scheduler = None
 
-    loss_func = nn.CrossEntropyLoss().to(device)
+    loss_func = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).to(device)
 
     if args.resume:
         (

@@ -26,7 +26,8 @@ def training_optimization(
     lr: float = 1e-4,
     momentum: float = 0.5,
     weight_decay: float = 1e-4,
-    nesterov: bool = False
+    nesterov: bool = False,
+    label_smoothing: float = 0.0
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -39,6 +40,7 @@ def training_optimization(
         weight_decay = args.weight_decay
         if hasattr(args, "nesterov"):
             nesterov = args.nesterov
+        label_smoothing = args.label_smoothing
         best_test_loss = float('inf')
         best_test_acc = -float('inf')
         patience_counter = 0
@@ -109,7 +111,7 @@ def training_optimization(
         else:
             warmup_scheduler = None
 
-    loss_func = nn.CrossEntropyLoss().to(device)
+    loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing).to(device)
 
     for epoch in tqdm(range(1, epochs + 1), desc= desc):
         loss_list = []
