@@ -50,7 +50,7 @@ def training_optimization(
             logger= logger,
         )
 
-    if opt not in ["sgd", "adam"]:
+    if opt not in ["sgd", "adam", "adamw"]:
         raise Exception("Select correct optimizer")
 
     if isinstance(lr, list):
@@ -81,8 +81,10 @@ def training_optimization(
 
     if opt == "sgd":
         optimizer = torch.optim.SGD(optim_param, momentum= momentum, weight_decay=weight_decay, nesterov=nesterov)
-    else:
+    elif opt == "adam":
         optimizer = torch.optim.Adam(optim_param, weight_decay=weight_decay)
+    elif opt == "adamw":
+        optimizer = torch.optim.AdamW(optim_param, weight_decay=weight_decay)
 
     if desc == "Retraining model":
         if hasattr(args, "lr_scheduler"):

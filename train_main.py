@@ -34,7 +34,7 @@ parser.add_argument("-resume", dest="resume", action="store_true", default=False
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
 parser.add_argument("-lr", type=float, nargs='+', default= [1e-4], help='Learning rate(s)')
-parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "adam"])
+parser.add_argument("-optimizer", type= str, default= "adam", choices= ["sgd", "adam", "adamw"])
 parser.add_argument('-momentum', type=float, default= 0.5, help='SGD momentum (default: 0.5)')
 parser.add_argument('-weight_decay', type=float, default= 1e-4, help='Weight decay')
 parser.add_argument("-nesterov", dest="nesterov", action="store_true", default=False, help="SGD nesterov momentum")
@@ -163,7 +163,7 @@ if __name__ == "__main__":
         logger= logger,
     )
 
-    if args.optimizer not in ["sgd", "adam"]:
+    if args.optimizer not in ["sgd", "adam", "adamw"]:
         raise Exception("select correct optimizer")
 
     if len(args.lr) == 2:
@@ -189,8 +189,10 @@ if __name__ == "__main__":
 
     if args.optimizer == "sgd":
         optimizer = torch.optim.SGD(optim_param, momentum=args.momentum, weight_decay=args.weight_decay, nesterov=args.nesterov)
-    else:
+    elif args.optimizer == "adam":
         optimizer = torch.optim.Adam(optim_param, weight_decay=args.weight_decay)
+    elif args.optimizer == "adamw":
+        optimizer = torch.optim.AdamW(optim_param, weight_decay=args.weight_decay)
 
     lr_scheduler = scheduler.get_lr_scheduler(
         args.lr_scheduler, 

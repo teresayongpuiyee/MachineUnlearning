@@ -4,7 +4,7 @@ Source: https://github.com/weiaicunzai/pytorch-cifar100
 
 from torch import nn
 import torch
-from model.resnet import ResNet, BasicBlock, BottleNeck, TimmResNet
+from model.resnet import ResNet, BasicBlock, BottleNeck, TimmResNet, TimmViT
 import torch.nn.functional as F
 
 
@@ -39,6 +39,10 @@ def timm_ResNet18(num_classes, pretrained=False, **kwargs):
 def timm_ResNet101(num_classes, pretrained=False, **kwargs):
     """return a timm ResNet101 object"""
     return TimmResNet('resnet101', num_classes=num_classes, pretrained=pretrained)
+
+def timm_ViTSmall(num_classes, pretrained=False, **kwargs):
+    """return a timm ViTSmall object"""
+    return TimmViT('vit_small_patch8_224', num_classes=num_classes, pretrained=pretrained)
 
 class MLP(nn.Module):
     def __init__(
