@@ -745,7 +745,8 @@ def pour_distill(
     lr_gamma = 0.1,
     lr_factor = 0.1,
     lr_step_size = 15,
-    min_lr = 1e-6
+    min_lr = 1e-6,
+    lr_power = 0.9
 ):
     if optimizer not in ["sgd", "adam"]:
         raise Exception("Select correct optimizer")
@@ -764,7 +765,8 @@ def pour_distill(
         lr_gamma=lr_gamma,
         lr_factor=lr_factor,
         lr_step_size=lr_step_size,
-        min_lr=min_lr
+        min_lr=min_lr,
+        lr_power=lr_power
     )
 
     for epoch in tqdm(range(1, epochs + 1), desc= "Fine-tuning POUR-D"):

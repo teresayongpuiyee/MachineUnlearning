@@ -13,14 +13,15 @@ def get_lr_scheduler(scheduler_type: str, optimizer, **kwargs):
     Returns:
         The learning rate scheduler instance or None.
     """
-    milestones = kwargs.pop('milestones')
-    epochs = kwargs.pop('epochs')
-    t0 = kwargs.pop('t0')
-    lr_patience = kwargs.pop('lr_patience')
-    lr_gamma = kwargs.pop('lr_gamma')
-    lr_factor = kwargs.pop('lr_factor')
-    lr_step_size = kwargs.pop('lr_step_size')
-    min_lr = kwargs.pop('min_lr')
+    milestones = kwargs.pop('milestones', [10, 20])
+    epochs = kwargs.pop('epochs', 30)
+    t0 = kwargs.pop('t0', 5)
+    lr_patience = kwargs.pop('lr_patience', 5)
+    lr_gamma = kwargs.pop('lr_gamma', 0.1)
+    lr_factor = kwargs.pop('lr_factor', 0.1)
+    lr_step_size = kwargs.pop('lr_step_size', 15)
+    min_lr = kwargs.pop('min_lr', 1e-6)
+    lr_power = kwargs.pop('lr_power', 0.9)
 
     if scheduler_type == "constant":
         return None
@@ -36,6 +37,8 @@ def get_lr_scheduler(scheduler_type: str, optimizer, **kwargs):
         return lr_scheduler.ExponentialLR(optimizer, gamma=lr_gamma)
     elif scheduler_type == "step":
         return lr_scheduler.StepLR(optimizer, step_size=lr_step_size, gamma=lr_gamma)
+    elif scheduler_type == "polynomial":
+        return lr_scheduler.PolynomialLR(optimizer, total_iters=epochs, power=lr_power)
     else:
         raise ValueError(f"Unknown scheduler type: {scheduler_type}")
 

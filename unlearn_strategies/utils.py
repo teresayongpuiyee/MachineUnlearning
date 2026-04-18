@@ -100,7 +100,8 @@ def training_optimization(
                 lr_gamma=args.lr_gamma,
                 lr_factor=args.lr_factor,
                 lr_step_size=args.lr_step_size,
-                min_lr=args.min_lr
+                min_lr=args.min_lr,
+                lr_power=args.lr_power
             )
         else:
             lr_scheduler = None

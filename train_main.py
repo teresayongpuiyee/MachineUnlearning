@@ -50,7 +50,8 @@ parser.add_argument("-lr_scheduler", type= str, default= "constant",
                         "reducelronplateau",
                         "cosineannealing",
                         "exponential",
-                        "step"
+                        "step",
+                        "polynomial"
                         ])
 parser.add_argument("-milestones", type= int, nargs='+', default= [10, 20], help= "Steps for lr decay in multisteplr")
 parser.add_argument("-t0", type= int, default= 5, help= "Number of epochs for the first restart in CosineAnnealingWarmRestarts")
@@ -60,6 +61,7 @@ parser.add_argument('-lr_factor', type=float, default=0.1, help='Learning rate f
 parser.add_argument('-warm', type=int, default=0, help='Warm up training phase')
 parser.add_argument("-lr_step_size", type= int, default= 15, help= "Step size for StepLR")
 parser.add_argument('-min_lr', type=float, default=1e-6, help='Minimum learning rate')
+parser.add_argument('-lr_power', type=float, default=0.9, help='Power for PolynomialLR')
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
 parser.add_argument('-es_patience', type=int, default=10, help='Early stopping patience')
@@ -205,7 +207,8 @@ if __name__ == "__main__":
         lr_gamma=args.lr_gamma,
         lr_factor=args.lr_factor,
         lr_step_size=args.lr_step_size,
-        min_lr=args.min_lr
+        min_lr=args.min_lr,
+        lr_power=args.lr_power
     )
 
     if args.warm > 0:
