@@ -40,9 +40,13 @@ def timm_ResNet101(num_classes, pretrained=False, **kwargs):
     """return a timm ResNet101 object"""
     return TimmResNet('resnet101', num_classes=num_classes, pretrained=pretrained)
 
+def timm_ViTTiny(num_classes, pretrained=False, **kwargs):
+    """return a timm ViTTiny object"""
+    return TimmViT('vit_tiny_patch16_224', num_classes=num_classes, pretrained=pretrained)
+
 def timm_ViTSmall(num_classes, pretrained=False, **kwargs):
     """return a timm ViTSmall object"""
-    return TimmViT('vit_small_patch8_224', num_classes=num_classes, pretrained=pretrained)
+    return TimmViT('vit_small_patch16_224', num_classes=num_classes, pretrained=pretrained)
 
 class MLP(nn.Module):
     def __init__(
