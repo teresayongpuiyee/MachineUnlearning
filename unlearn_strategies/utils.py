@@ -11,6 +11,8 @@ from src import metrics, scheduler, utils
 import argparse
 from typing import Tuple
 import os
+from timm.data import Mixup
+from timm.loss import SoftTargetCrossEntropy
 
 
 def training_optimization(
@@ -27,7 +29,8 @@ def training_optimization(
     momentum: float = 0.5,
     weight_decay: float = 1e-4,
     nesterov: bool = False,
-    label_smoothing: float = 0.0
+    label_smoothing: float = 0.0,
+    mixup: bool = False,
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -51,6 +54,8 @@ def training_optimization(
             device= device,
             logger= logger,
         )
+
+        mixup = args.mixup
 
     if opt not in ["sgd", "adam", "adamw"]:
         raise Exception("Select correct optimizer")
@@ -112,7 +117,19 @@ def training_optimization(
         else:
             warmup_scheduler = None
 
-    loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing).to(device)
+    if desc == "Retraining model" and mixup:
+        mixup_fn = Mixup(
+            mixup_alpha=0.8,
+            cutmix_alpha=1.0,
+            prob=1.0,              # probability of applying
+            switch_prob=0.5,       # mixup vs cutmix
+            mode='batch',          # apply to whole batch
+            label_smoothing=0.1,
+            num_classes=len(train_loader.dataset.classes)
+        )
+        loss_func = SoftTargetCrossEntropy().to(device)
+    else:
+        loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing).to(device)
 
     for epoch in tqdm(range(1, epochs + 1), desc= desc):
         loss_list = []
@@ -120,6 +137,9 @@ def training_optimization(
         for images, labels in train_loader:
             images = images.to(device, non_blocking=True)
             labels = labels.long().to(device, non_blocking=True)
+
+            if desc == "Retraining model" and mixup:
+                images, labels = mixup_fn(images, labels)
 
             trained_model.zero_grad()
             output = trained_model(images)

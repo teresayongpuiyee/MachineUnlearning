@@ -10,6 +10,8 @@ import wandb
 import datetime
 import os
 import yaml
+from timm.data import Mixup
+from timm.loss import SoftTargetCrossEntropy
 
 parser = argparse.ArgumentParser()
 # Device
@@ -64,6 +66,7 @@ parser.add_argument('-min_lr', type=float, default=1e-6, help='Minimum learning 
 parser.add_argument('-lr_power', type=float, default=0.9, help='Power for PolynomialLR')
 
 parser.add_argument("-early_stop", dest="early_stop", action="store_true", default=False, help="Enable early stopping")
+parser.add_argument("-mixup", dest="mixup", action="store_true", default=False, help="Enable mixup")
 parser.add_argument('-es_patience', type=int, default=10, help='Early stopping patience')
 
 # Set seed
@@ -217,7 +220,19 @@ if __name__ == "__main__":
     else:
         warmup_scheduler = None
 
-    loss_func = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).to(device)
+    if args.mixup:
+        mixup_fn = Mixup(
+            mixup_alpha=0.8,
+            cutmix_alpha=1.0,
+            prob=1.0,              # probability of applying
+            switch_prob=0.5,       # mixup vs cutmix
+            mode='batch',          # apply to whole batch
+            label_smoothing=0.1,
+            num_classes=num_classes
+        )
+        loss_func = SoftTargetCrossEntropy().to(device)
+    else:
+        loss_func = nn.CrossEntropyLoss(label_smoothing=args.label_smoothing).to(device)
 
     if args.resume:
         (
@@ -246,6 +261,9 @@ if __name__ == "__main__":
         for images, labels in train_loader:
             images = images.to(device, non_blocking=True)
             labels = labels.long().to(device, non_blocking=True)
+
+            if args.mixup:
+                images, labels = mixup_fn(images, labels)
 
             model.zero_grad()
             output = model(images)
