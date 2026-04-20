@@ -204,7 +204,7 @@ if __name__ == "__main__":
         args.lr_scheduler, 
         optimizer, 
         milestones=args.milestones, 
-        epochs=args.epochs, 
+        epochs=args.epochs - args.warm, 
         t0=args.t0,
         lr_patience=args.lr_patience,
         lr_gamma=args.lr_gamma,
