@@ -87,7 +87,7 @@ def main(args) -> None:
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
-    args.model_root = "/".join([".", exp_name, f"{args.unlearn_class}"], args.model_root)
+    args.model_root = "/".join([".", exp_name, f"{args.unlearn_class}", args.model_root])
     # Set seed
     utils.set_seed(seed=args.seed)
 
