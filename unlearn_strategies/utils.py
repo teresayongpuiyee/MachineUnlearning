@@ -120,12 +120,12 @@ def training_optimization(
     if desc == "Retraining model" and mixup:
         mixup_fn = Mixup(
             mixup_alpha=0.8,
-            cutmix_alpha=1.0,
+            cutmix_alpha=0.5,
             prob=1.0,              # probability of applying
-            switch_prob=0.5,       # mixup vs cutmix
+            switch_prob=0.3,       # mixup vs cutmix
             mode='batch',          # apply to whole batch
-            label_smoothing=0.1,
-            num_classes=len(train_loader.dataset.classes)
+            label_smoothing=label_smoothing,
+            num_classes=len(train_loader.dataset.dataset.classes)
         )
         loss_func = SoftTargetCrossEntropy().to(device)
     else:
@@ -234,7 +234,11 @@ def save_model(
 def get_fc(module):
     if hasattr(module, "fc"):
         return module.fc
+    elif hasattr(module, "head"):
+        return module.head
     elif hasattr(module, "model") and hasattr(module.model, "fc"):
         return module.model.fc
+    elif hasattr(module, "model") and hasattr(module.model, "head"):
+        return module.model.head
     else:
-        raise AttributeError("Cannot find fc layer")
+        raise AttributeError("Cannot find fc or head layer")

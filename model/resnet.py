@@ -198,7 +198,7 @@ class TimmResNet(nn.Module):
 class TimmViT(nn.Module):
     def __init__(self, vit_type = 'vit_small_patch8_224', num_classes=10, pretrained=False):
         super().__init__()
-        self.model = timm.create_model(vit_type, pretrained=pretrained, num_classes=num_classes)
+        self.model = timm.create_model(vit_type, pretrained=pretrained, num_classes=num_classes, drop_path_rate=0.3)
 
     def forward(self, x):
         return self.model(x)

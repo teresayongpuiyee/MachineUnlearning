@@ -223,11 +223,11 @@ if __name__ == "__main__":
     if args.mixup:
         mixup_fn = Mixup(
             mixup_alpha=0.8,
-            cutmix_alpha=1.0,
+            cutmix_alpha=0.5,
             prob=1.0,              # probability of applying
-            switch_prob=0.5,       # mixup vs cutmix
+            switch_prob=0.3,       # mixup vs cutmix
             mode='batch',          # apply to whole batch
-            label_smoothing=0.1,
+            label_smoothing=args.label_smoothing,
             num_classes=num_classes
         )
         loss_func = SoftTargetCrossEntropy().to(device)
