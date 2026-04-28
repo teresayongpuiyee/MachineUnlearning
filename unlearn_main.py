@@ -187,6 +187,10 @@ def main(args) -> None:
     # Evaluation after unlearning
     # Classification-level evaluation
     logger.info(f"Unlearned classification")
+    train_acc = metrics.evaluate(val_loader=train_loader, model=unlearned_model, device=device)['Acc']
+    logger.info(f"Train acc: {train_acc}")
+    test_acc = metrics.evaluate(val_loader=test_loader, model=unlearned_model, device=device)['Acc']
+    logger.info(f"Test acc: {test_acc}")
     retain_acc = metrics.evaluate(val_loader=retain_eval_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Retain acc: {retain_acc}")
     unlearn_acc = metrics.evaluate(val_loader=unlearn_eval_loader, model=unlearned_model, device=device)['Acc']
@@ -196,23 +200,25 @@ def main(args) -> None:
     test_unlearn_acc = metrics.evaluate(val_loader=test_unlearn_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Test unlearn acc: {test_unlearn_acc}")
 
-    logger.info(f"Unlearned representation")
-    linear_probe_acc = repr_metrics.linear_probing(
-        train_loader= train_aug_loader,
-        retain_eval_loader= retain_eval_loader,
-        unlearn_eval_loader= unlearn_eval_loader,
-        model= unlearned_model,
-        num_classes= num_classes,
-        lr= args.linear_probe_lr,
-    )
-    logger.info(f"Linear probing acc: {linear_probe_acc}")
+    #logger.info(f"Unlearned representation")
+    #linear_probe_acc = repr_metrics.linear_probing(
+    #    train_loader= train_aug_loader,
+    #    retain_eval_loader= retain_eval_loader,
+    #    unlearn_eval_loader= unlearn_eval_loader,
+    #    model= unlearned_model,
+    #    num_classes= num_classes,
+    #    lr= args.linear_probe_lr,
+    #)
+    #logger.info(f"Linear probing acc: {linear_probe_acc}")
 
     metrics_dict = {
+        "classification/train_acc": train_acc,
+        "classification/test_acc": test_acc,
         "classification/retain_acc": retain_acc,
         "classification/unlearn_acc": unlearn_acc,
         "classification/test_retain_acc": test_retain_acc,
         "classification/test_unlearn_acc": test_unlearn_acc,
-        "representation/linear_probe_acc": linear_probe_acc,
+        #"representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }
 
