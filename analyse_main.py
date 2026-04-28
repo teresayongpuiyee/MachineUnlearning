@@ -34,14 +34,14 @@ args = parser.parse_args()
 
 def main(args) -> None:
     unlearned_model_path_list = args.unlearned_model.split("/")
-    exp_name = unlearned_model_path_list[-3]
+    exp_name = unlearned_model_path_list[-4]
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
     
     model_path = "/".join(unlearned_model_path_list[:-1])
     ori_model_path = f"{model_path}/baseline.pt"
     retrain_model_path = f"{model_path}/retrain.pt"
 
-    output_path = f"./{exp_name}/analyse_outputs/"
+    output_path = f"./{exp_name}/{args.unlearn_class}/analyse_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")

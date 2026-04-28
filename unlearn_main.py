@@ -76,7 +76,7 @@ def main(args) -> None:
         # Convert the final dictionary back to an argparse-like object (Namespace)
         args = argparse.Namespace(**config_dict)
 
-    output_path = f"./{exp_name}/unlearn_outputs/"
+    output_path = f"./{exp_name}/{args.unlearn_class}/unlearn_outputs/"
 
     utils.create_directory_if_not_exists(output_path)
 
@@ -87,7 +87,7 @@ def main(args) -> None:
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
-    args.model_root = "/".join([".", exp_name, args.model_root])
+    args.model_root = "/".join([".", exp_name, f"{args.unlearn_class}"], args.model_root)
     # Set seed
     utils.set_seed(seed=args.seed)
 

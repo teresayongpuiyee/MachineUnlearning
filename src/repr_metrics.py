@@ -501,6 +501,7 @@ def visualize_tsne(
     all_labels: torch.tensor,
     unlearn_method: str,
     exp_name: str,
+    unlearn_class: int,
     perplexity: int = 30,
     n_iter: int = 1000,
     max_samples: int = 10000,
@@ -594,7 +595,7 @@ def visualize_tsne(
     plt.tight_layout()
 
     # Save figure
-    save_path = "/".join([".", exp_name, "visualize"])
+    save_path = "/".join([".", exp_name, f"{unlearn_class}", "visualize"])
     os.makedirs(save_path, exist_ok=True)
     
     plt.savefig(save_path + f"/tsne_{unlearn_method}.png")

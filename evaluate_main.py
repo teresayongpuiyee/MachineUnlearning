@@ -38,13 +38,13 @@ args = parser.parse_args()
 
 def main(args) -> None:
     unlearned_model_path_list = args.unlearned_model.split("/")
-    exp_name = unlearned_model_path_list[-3]
+    exp_name = unlearned_model_path_list[-4]
     unlearn_method = unlearned_model_path_list[-1].split(".")[0]
 
     if len(args.project_method) > 0:
-        output_path = f"./{exp_name}/evaluate_outputs_{args.project_method}/"
+        output_path = f"./{exp_name}/{args.unlearn_class}/evaluate_outputs_{args.project_method}/"
     else:
-        output_path = f"./{exp_name}/evaluate_outputs/"
+        output_path = f"./{exp_name}/{args.unlearn_class}/evaluate_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
     logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
@@ -259,7 +259,8 @@ def main(args) -> None:
             reps=train_reps,
             all_labels=train_labels,
             unlearn_method=unlearn_method,
-            exp_name=exp_name
+            exp_name=exp_name, 
+            unlearn_class=args.unlearn_class,
         )
         logger.info("t-SNE visualization saved.")
 
