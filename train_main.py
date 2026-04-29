@@ -95,7 +95,7 @@ def flatten_dict(d, prefix=''):
 
 if __name__ == "__main__":
 
-    if os.path.exists(f"./{args.exp_name}") and not args.resume:
+    if os.path.exists(f"./{args.exp_name}") and not args.resume and len(args.pretrained_weight) == 0:
         args.exp_name = args.exp_name + "_" + timestamp
 
     utils.create_directory_if_not_exists(f"./{args.exp_name}/")
@@ -112,12 +112,17 @@ if __name__ == "__main__":
         # Convert to OmegaConf object
         flattened_config = flatten_dict(config_dict)
 
+        if len(args.pretrained_weight) != 0:
+            wandb_name = f"{args.exp_name}_pretrained"
+        else:
+            wandb_name = args.exp_name
+
         wandb.login()
 
         run = wandb.init(
             # Set the project where this run will be logged
             project=args.project,
-            name=args.exp_name,
+            name=wandb_name,
             dir="./"+args.exp_name,
             # Track hyperparameters and run metadata
             config=flattened_config,
