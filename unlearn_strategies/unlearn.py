@@ -733,7 +733,7 @@ def pour_distill(
     unlearn_loader,
     test_loader,
     device,
-    epochs = 10,
+    epochs = 100,
     optimizer = "adam",
     lr = 0.0001,
     momentum = 0,
