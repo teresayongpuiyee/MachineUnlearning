@@ -31,7 +31,10 @@ def get_dataset(
                 transforms.ToTensor(),
                 transforms.Normalize(IMAGENET_MEAN, IMAGENET_STD)
             ])
-        train_dataset = TinyImageNet(Path(f"{root}/"), split="train", transform=train_transform, imagenet_idx=False)
+        if augment:
+            train_dataset = TinyImageNet(Path(f"{root}/"), split="train", transform=train_transform, imagenet_idx=False)
+        else:
+            train_dataset = TinyImageNet(Path(f"{root}/"), split="train", transform=test_transform, imagenet_idx=False)
         test_dataset = TinyImageNet(Path(f"{root}/"), split="val", transform=test_transform, imagenet_idx=False)
     else:
         train_dataset = getattr(raw_dataset, dataset_name)(
