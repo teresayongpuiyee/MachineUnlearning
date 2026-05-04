@@ -19,6 +19,25 @@ from openTSNE import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 
+def get_logits(
+    loader: DataLoader,
+    model: torch.nn.Module,
+):
+    model.eval()
+    loader = DataLoader(
+        loader.dataset, batch_size=loader.batch_size, shuffle=False, num_workers=loader.num_workers, pin_memory=True, persistent_workers=True
+    )
+    logits = []
+    all_labels = []
+    with torch.no_grad():
+        for batch in tqdm(loader):
+            batch = [tensor.to(next(model.parameters()).device) for tensor in batch]
+            data, target = batch
+            logit = model(data)
+            logits.append(logit.detach().cpu())
+            all_labels.append(target.cpu())
+    return torch.cat(logits, dim=0), torch.cat(all_labels, dim=0)
+
 def get_representations(
     loader: DataLoader,
     model: torch.nn.Module,
@@ -31,7 +50,7 @@ def get_representations(
     all_labels = []
     with torch.no_grad():
         for batch in tqdm(loader):
-            batch = [tensor.to(next(model.parameters()).device) for tensor in batch]
+            batch = [tensor.to(next(model.parameters()).device, non_blocking=True) for tensor in batch]
             data, target = batch
             feat = model.feature_extractor(data)
             feat = feat.view(feat.size(0), -1)
@@ -417,8 +436,8 @@ def linear_probing(
     unlearn_eval_loader: DataLoader,
     model: torch.nn.Module,
     num_classes: int,
-    epochs: int = 10,
-    lr: float = 1e-3,
+    epochs: int = 20,
+    lr: float = 1e-2,
 ) -> dict:
     """
     Trains a linear probe (head) on top of frozen model representations using SGD and cross-entropy,
@@ -454,7 +473,8 @@ def linear_probing(
     for param in head.parameters():
         param.requires_grad = True
 
-    optimizer = optim.SGD(head.parameters(), lr=lr)
+    optimizer = optim.Adam(head.parameters(), lr=lr, weight_decay=1e-4)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss()
 
     # Train linear head
@@ -470,6 +490,7 @@ def linear_probing(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+        scheduler.step()
 
     # Evaluation
     def eval_accuracy(loader):
@@ -495,16 +516,56 @@ def linear_probing(
         "forget_accuracy": round(forget_acc, 4)
     }
 
+def binary_forget_probe(
+    retain_eval_loader: DataLoader,   # representations of forget samples
+    unlearn_eval_loader: DataLoader,   # representations of retain samples (subsample to balance)
+    unlearned_model: torch.nn.Module
+) -> dict:
+    """
+    Binary probe: can we linearly distinguish forget-class representations
+    from non-forget representations? This is the core of experiment D.
+    
+    Labels: forget=1, retain=0
+    Higher accuracy → forget information still encoded in representations.
+    Should be ~50% for a perfectly unlearned model.
+    """
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.model_selection import cross_val_score
+    import numpy as np
+
+    forget_reps = get_representations(unlearn_eval_loader, unlearned_model)
+    retain_reps = get_representations(retain_eval_loader, unlearned_model)
+
+    # Balance classes
+    n = min(len(forget_reps), len(retain_reps))
+    X_forget = forget_reps[:n].cpu().numpy()
+    X_retain = retain_reps[:n].cpu().numpy()
+    
+    X = np.concatenate([X_forget, X_retain], axis=0)
+    y = np.array([1]*n + [0]*n)
+    
+    scaler = StandardScaler()
+    X = scaler.fit_transform(X)
+    
+    clf = LogisticRegression(max_iter=1000)
+    scores = cross_val_score(clf, X, y, cv=5, scoring='accuracy')
+    
+    return {
+        "binary_probe_acc_mean": round(scores.mean() * 100, 2),
+        "binary_probe_acc_std": round(scores.std() * 100, 2),
+    }
+
 # t-SNE visualization function
 def visualize_tsne(
     reps: torch.tensor,
     all_labels: torch.tensor,
     unlearn_method: str,
-    exp_name: str,
-    unlearn_class: int,
+    save_path: str,
     perplexity: int = 30,
     n_iter: int = 1000,
     max_samples: int = 10000,
+    tag: str = "",
 ):
     """
     Visualize representations using t-SNE.
@@ -512,10 +573,11 @@ def visualize_tsne(
         reps: Torch tensor of shape (N, D) with representations
         all_labels: Torch tensor of shape (N,) with labels
         unlearn_method: Name for title / filename
-        exp_name: Folder name to save visualization
+        save_path: Folder path to save visualization
         perplexity: t-SNE perplexity
         n_iter: Number of t-SNE iterations
         max_samples: Max number of points to visualize (subsampling)
+        tag: Additional tag for filename
     """
     reps = reps.numpy()
     all_labels = all_labels.numpy()
@@ -595,10 +657,10 @@ def visualize_tsne(
     plt.tight_layout()
 
     # Save figure
-    save_path = "/".join([".", exp_name, f"{unlearn_class}", "visualize"])
+    save_path = save_path + f"visualize"
     os.makedirs(save_path, exist_ok=True)
-    
-    plt.savefig(save_path + f"/tsne_{unlearn_method}.png")
+    plt.tight_layout()
+    plt.savefig(save_path + f"/tsne_{unlearn_method}_{tag}.png")
     plt.close()
 
 def linear_cka(X, Y, eps=1e-8):
