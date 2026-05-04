@@ -436,8 +436,8 @@ def linear_probing(
     unlearn_eval_loader: DataLoader,
     model: torch.nn.Module,
     num_classes: int,
-    epochs: int = 20,
-    lr: float = 1e-2,
+    epochs: int = 10,
+    lr: float = 1e-3,
 ) -> dict:
     """
     Trains a linear probe (head) on top of frozen model representations using SGD and cross-entropy,
@@ -472,9 +472,10 @@ def linear_probing(
         param.requires_grad = False
     for param in head.parameters():
         param.requires_grad = True
-
-    optimizer = optim.Adam(head.parameters(), lr=lr, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
+    
+    optimizer = optim.SGD(head.parameters(), lr=lr)
+    #optimizer = optim.Adam(head.parameters(), lr=lr, weight_decay=1e-4)
+    #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss()
 
     # Train linear head
@@ -490,7 +491,7 @@ def linear_probing(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-        scheduler.step()
+        #scheduler.step()
 
     # Evaluation
     def eval_accuracy(loader):
@@ -534,8 +535,8 @@ def binary_forget_probe(
     from sklearn.model_selection import cross_val_score
     import numpy as np
 
-    forget_reps = get_representations(unlearn_eval_loader, unlearned_model)
-    retain_reps = get_representations(retain_eval_loader, unlearned_model)
+    forget_reps, _ = get_representations(unlearn_eval_loader, unlearned_model)
+    retain_reps, _ = get_representations(retain_eval_loader, unlearned_model)
 
     # Balance classes
     n = min(len(forget_reps), len(retain_reps))
@@ -552,8 +553,8 @@ def binary_forget_probe(
     scores = cross_val_score(clf, X, y, cv=5, scoring='accuracy')
     
     return {
-        "binary_probe_acc_mean": round(scores.mean() * 100, 2),
-        "binary_probe_acc_std": round(scores.std() * 100, 2),
+        "binary_probe_acc_mean": round(float(scores.mean() * 100), 2),
+        "binary_probe_acc_std": round(float(scores.std() * 100), 2),
     }
 
 # t-SNE visualization function
