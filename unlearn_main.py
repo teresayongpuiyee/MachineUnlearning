@@ -54,7 +54,7 @@ parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
 # Unlearn Hyperparameter
-parser.add_argument("-linear_probe_lr", type=float, default= 1e-2, help='Learning rate')
+parser.add_argument("-linear_probe_lr", type=float, default= 1e-3, help='Learning rate')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -76,7 +76,7 @@ def main(args) -> None:
         # Convert the final dictionary back to an argparse-like object (Namespace)
         args = argparse.Namespace(**config_dict)
 
-    output_path = f"./{exp_name}/{args.unlearn_class}/unlearn_outputs_lp/"
+    output_path = f"./{exp_name}/{args.unlearn_class}/unlearn_outputs/"
 
     utils.create_directory_if_not_exists(output_path)
 
@@ -145,15 +145,14 @@ def main(args) -> None:
     unlearning_teacher = getattr(models, args.model)(
         num_classes=num_classes, input_channels=num_channels).to(device)
 
-    #if args.unlearn_method != "retrain":
+    if args.unlearn_method != "retrain":
         # Load trained model to unlearn
-    utils.load_model_weights(
-        model=model,
-        model_path=args.model_path,
-        device=device
-    )
-    unlearned_model = model
-    """
+        utils.load_model_weights(
+            model=model,
+            model_path=args.model_path,
+            device=device
+        )
+
     start_time = time.time()
     logger.info("Starting unlearning process...")
     # Unlearn
@@ -200,7 +199,7 @@ def main(args) -> None:
     logger.info(f"Test retain acc: {test_retain_acc}")
     test_unlearn_acc = metrics.evaluate(val_loader=test_unlearn_loader, model=unlearned_model, device=device)['Acc']
     logger.info(f"Test unlearn acc: {test_unlearn_acc}")
-    """
+
     logger.info(f"Unlearned representation")
 
     bin_probe_acc = repr_metrics.binary_forget_probe(
@@ -220,15 +219,15 @@ def main(args) -> None:
     logger.info(f"Linear probing acc: {linear_probe_acc}")
 
     metrics_dict = {
-        #"classification/train_acc": train_acc,
-        #"classification/test_acc": test_acc,
-        #"classification/retain_acc": retain_acc,
-        #"classification/unlearn_acc": unlearn_acc,
-        #"classification/test_retain_acc": test_retain_acc,
-        #"classification/test_unlearn_acc": test_unlearn_acc,
+        "classification/train_acc": train_acc,
+        "classification/test_acc": test_acc,
+        "classification/retain_acc": retain_acc,
+        "classification/unlearn_acc": unlearn_acc,
+        "classification/test_retain_acc": test_retain_acc,
+        "classification/test_unlearn_acc": test_unlearn_acc,
         "representation/binary_probe_acc": bin_probe_acc,
         "representation/linear_probe_acc": linear_probe_acc,
-        #"runtime_sec": runtime
+        "runtime_sec": runtime
     }
 
     with open(OUTPUT_METRICS_FILE, 'w') as f:

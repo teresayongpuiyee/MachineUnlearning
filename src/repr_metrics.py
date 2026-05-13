@@ -31,7 +31,7 @@ def get_logits(
     all_labels = []
     with torch.no_grad():
         for batch in tqdm(loader):
-            batch = [tensor.to(next(model.parameters()).device) for tensor in batch]
+            batch = [tensor.to(next(model.parameters()).device, non_blocking=True) for tensor in batch]
             data, target = batch
             logit = model(data)
             logits.append(logit.detach().cpu())
@@ -557,6 +557,13 @@ def binary_forget_probe(
         "binary_probe_acc_std": round(float(scores.std() * 100), 2),
     }
 
+DISTINCT_COLORS = [
+    "#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4",
+    "#42d4f4", "#f032e6", "#bfef45", "#fabed4", "#469990",
+    "#dcbeff", "#9a6324", "#800000", "#aaffc3", "#808000",
+    "#ffd8b1", "#000075", "#a9a9a9", "#000000", "#fffac8",
+]
+
 # t-SNE visualization function
 def visualize_tsne(
     reps: torch.tensor,
@@ -617,43 +624,48 @@ def visualize_tsne(
     # Ensure consistent color mapping: map each label to a specific color
     unique_labels = np.unique(all_labels)
     unique_labels_sorted = np.sort(unique_labels)
-
-    # Map label -> stable index
     label_to_idx = {label: i for i, label in enumerate(unique_labels_sorted)}
-    color_indices = np.array([label_to_idx[l] for l in all_labels])
-
     num_classes = len(unique_labels_sorted)
 
-    # Use large continuous colormap
-    cmap = plt.get_cmap("gist_ncar")
-
-    # Normalize indices to [0,1]
-    norm = mcolors.Normalize(vmin=0, vmax=num_classes - 1)
+    # Map each sample to its color
+    colors = [DISTINCT_COLORS[i % len(DISTINCT_COLORS)] for i in range(num_classes)]
+    color_mapped = [colors[label_to_idx[l]] for l in all_labels]
 
     # Plot
-    plt.figure(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(8, 6))
 
-    scatter = plt.scatter(
+    ax.scatter(
         reps_2d[:, 0],
         reps_2d[:, 1],
-        c=color_indices,
-        cmap=cmap,
-        norm=norm,
+        c=color_mapped,
         s=8,
         alpha=0.7,
     )
     
-    plt.title(f"t-SNE Visualization - {unlearn_method}")
-    plt.xlabel('t-SNE 1')
-    plt.ylabel('t-SNE 2')
+    ax.set_title(f"t-SNE Visualization - {unlearn_method}")
+    #ax.axis('off')
+    ax.set_xlabel('t-SNE 1')
+    ax.set_ylabel('t-SNE 2')
     
     if num_classes <= 20:
-        cbar = plt.colorbar(scatter)
-        cbar.set_ticks(range(num_classes))
-        cbar.set_ticklabels(unique_labels_sorted)
-    else:
-        # Avoid clutter
-        pass
+        legend_handles = [
+            plt.Line2D(
+                [0], [0],
+                marker='o',
+                color='w',
+                markerfacecolor=colors[i],
+                markersize=8,
+                label=str(unique_labels_sorted[i])
+            )
+            for i in range(num_classes)
+        ]
+        ax.legend(
+            handles=legend_handles,
+            title="Class",
+            bbox_to_anchor=(1.05, 1),
+            loc='upper left',
+            borderaxespad=0.,
+        )
     
     plt.tight_layout()
 
@@ -661,7 +673,7 @@ def visualize_tsne(
     save_path = save_path + f"visualize"
     os.makedirs(save_path, exist_ok=True)
     plt.tight_layout()
-    plt.savefig(save_path + f"/tsne_{unlearn_method}_{tag}.png")
+    plt.savefig(save_path + f"/tsne_{unlearn_method}_{tag}.png", bbox_inches='tight')
     plt.close()
 
 def linear_cka(X, Y, eps=1e-8):

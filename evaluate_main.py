@@ -254,13 +254,13 @@ def main(args) -> None:
         "sure_miars_asr": sure_miars_asr,
     }
     
-    if len(args.project_method) == 0:
+    if len(args.project_method) == 0 and num_classes <= 20:  # Only visualize when not projecting and number of classes is manageable
         repr_metrics.visualize_tsne(
             reps=train_reps,
             all_labels=train_labels,
             unlearn_method=unlearn_method,
-            exp_name=exp_name, 
-            unlearn_class=args.unlearn_class,
+            save_path=output_path, 
+            tag="rep"
         )
         logger.info("t-SNE visualization saved.")
 
