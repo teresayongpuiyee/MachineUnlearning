@@ -852,10 +852,10 @@ class RADU:
                 p.requires_grad_(False)
 
             # Mean representations
-            orig_forget, _ = repr_metrics.get_representations(self.original_model, forget_loader)
-            orig_retain, _ = repr_metrics.get_representations(self.original_model, retain_loader)
-            ret_forget, _  = repr_metrics.get_representations(retrained_model, forget_loader)
-            ret_retain, _  = repr_metrics.get_representations(retrained_model, retain_loader)
+            orig_forget, _ = repr_metrics.get_representations(forget_loader, self.original_model)
+            orig_retain, _ = repr_metrics.get_representations(retain_loader, self.original_model)
+            ret_forget, _  = repr_metrics.get_representations(forget_loader, retrained_model)
+            ret_retain, _  = repr_metrics.get_representations(retain_loader, retrained_model)
 
             orig_forget  = orig_forget.mean(0)
             orig_retain  = orig_retain.mean(0)
