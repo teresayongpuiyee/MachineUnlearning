@@ -8,7 +8,7 @@ import itertools
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, dataset
-from src import dataset, scheduler, metrics, repr_metrics
+from src import dataset, scheduler, metrics, analyse
 from unlearn_strategies import utils
 import numpy as np
 import torch.distributions as distributions
@@ -851,16 +851,17 @@ class RADU:
             for p in retrained_model.parameters():
                 p.requires_grad_(False)
 
-            # Mean representations
-            orig_forget, _ = repr_metrics.get_representations(forget_loader, self.original_model)
-            orig_retain, _ = repr_metrics.get_representations(retain_loader, self.original_model)
-            ret_forget, _  = repr_metrics.get_representations(forget_loader, retrained_model)
-            ret_retain, _  = repr_metrics.get_representations(retain_loader, retrained_model)
-
-            orig_forget  = orig_forget.mean(0)
-            orig_retain  = orig_retain.mean(0)
-            ret_forget   = ret_forget.mean(0)
-            ret_retain   = ret_retain.mean(0) 
+            model_dict = {
+                "original": self.original_model,
+                "retrain": retrained_model,
+            }
+            mean_forget_reps_dict = analyse.extract_mean_representation_from_n_models(model_dict, forget_loader, self.device)
+            mean_retain_reps_dict = analyse.extract_mean_representation_from_n_models(model_dict, retain_loader, self.device)
+            
+            orig_forget = mean_forget_reps_dict["original"]
+            ret_forget = mean_forget_reps_dict["retrain"]
+            orig_retain = mean_retain_reps_dict["original"]
+            ret_retain = mean_retain_reps_dict["retrain"]
         
             delta_f = ret_forget - orig_forget   # (D,)
             delta_r = ret_retain - orig_retain   # (D,)
