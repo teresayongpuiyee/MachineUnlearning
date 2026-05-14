@@ -1,10 +1,14 @@
 """
 Unlearning tools function
 """
+import argparse
+import copy
+import itertools
+
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, dataset
-from src import dataset, scheduler, metrics
+from src import dataset, scheduler, metrics, repr_metrics
 from unlearn_strategies import utils
 import numpy as np
 import torch.distributions as distributions
@@ -804,3 +808,178 @@ def pour_distill(
                 lr_scheduler.step()
 
     return student_model
+
+
+class RADU:
+    def __init__(
+            self,
+            args: argparse.Namespace,
+            model: torch.nn.Module,
+            device: torch.device,
+        ):
+        self.original_model = copy.deepcopy(model)
+        self.unlearn_model = copy.deepcopy(model)
+        self.device = device
+
+        for p in self.original_model.parameters():
+            p.requires_grad_(False)
+
+        self.forget_loss_type = args.forget_loss_type
+        self.retain_loss_type = args.retain_loss_type
+
+        self.eta = args.eta
+        self.zeta = args.zeta
+        
+        self.lr = args.lr
+        self.epochs = args.epochs
+        
+        self.lambda_dir = args.lambda_dir
+        self.lambda_ret = args.lambda_ret
+        self.lambda_for = args.lambda_for
+        self.lambda_ret_rep = args.lambda_ret_rep
+
+    @torch.no_grad()
+    def compute_vf(self, forget_loader, retain_loader, retrain_model=None):
+        """
+        Δ_f = mean_retrain_forget − mean_original_forget
+        Δ_r = mean_retrain_retain − mean_original_retain
+        v_f = Δ_f − (Δ_f · Δ_r_hat) * Δ_r_hat   [Δ_f orthogonalized w.r.t. Δ_r]
+        Returns v_f normalized.
+        """
+        if retrain_model is not None:
+            retrained_model = copy.deepcopy(retrain_model)
+            for p in retrained_model.parameters():
+                p.requires_grad_(False)
+
+            # Mean representations
+            orig_forget, _ = repr_metrics.get_representations(self.original_model, forget_loader)
+            orig_retain, _ = repr_metrics.get_representations(self.original_model, retain_loader)
+            ret_forget, _  = repr_metrics.get_representations(retrained_model, forget_loader)
+            ret_retain, _  = repr_metrics.get_representations(retrained_model, retain_loader)
+
+            orig_forget  = orig_forget.mean(0)
+            orig_retain  = orig_retain.mean(0)
+            ret_forget   = ret_forget.mean(0)
+            ret_retain   = ret_retain.mean(0) 
+        
+            delta_f = ret_forget - orig_forget   # (D,)
+            delta_r = ret_retain - orig_retain   # (D,)
+    
+        # Normalize retain direction
+        delta_r_hat = F.normalize(delta_r, dim=0)
+    
+        # Project Δ_f orthogonal to Δ_r
+        projection  = torch.dot(delta_f, delta_r_hat) * delta_r_hat
+        v_f     = delta_f - projection
+    
+        cos_before = F.cosine_similarity(delta_f.unsqueeze(0),
+                                        delta_r.unsqueeze(0)).item()
+        cos_after  = F.cosine_similarity(v_f.unsqueeze(0),
+                                        delta_r_hat.unsqueeze(0)).item()
+        print(f"[v_f] cos(Δ_f, Δ_r) before projection: {cos_before:.4f}")
+        print(f"[v_f] cos(v_f,  Δ_r) after  projection: {cos_after:.4f}  (should ≈ 0)")
+    
+        return v_f, delta_r   # (D,)
+    
+    def compute_logit_loss(self, logits, original_logits, y_label, loss_type):
+        """
+        Weaken forget class signal at output level.
+        Preserve retain utility at output level.
+    
+        "ce"  : cross-entropy with ground truth labels.
+                gradient ascent on CE with ground truth labels.
+                Return -CE so minimizing total loss ascends on forget CE.
+                Directly opposes original training signal.
+                Keeps predictions correct; may over-sharpen beyond original calibration.
+    
+        "kl"  : KL(unlearn_probs || original_probs).
+                Pushes forget logits away from original distribution.
+                Smoother than gradient ascent; avoids instability.
+                Matches original model's full output distribution on retain set,
+                including calibration. Does not require ground truth labels.
+        """    
+        if loss_type == "ce":
+            return F.cross_entropy(logits, y_label)
+    
+        elif loss_type == "kl":
+            unlearn_log = F.log_softmax(logits, dim=-1)
+            orig_probs = F.softmax(original_logits, dim=-1)   # (B, C)
+
+            #uniform   = torch.full_like(unlearn_log, 1.0 / num_classes)       # (B, C)
+
+            return F.kl_div(unlearn_log, orig_probs, reduction="batchmean")
+
+    def train_radu(self, unlearn_loader, retain_loader, v_f, delta_r):
+        """
+        Main RADU training loop.
+        forget_targets: dict {sample_idx: target_rep (D,)}
+        """
+        optimizer = torch.optim.Adam(self.unlearn_model.parameters(), lr=self.lr)
+        self.original_model.eval()
+    
+        for epoch in range(self.epochs):
+
+            self.unlearn_model.train()
+
+            epoch_dir = 0.0
+            epoch_for = 0.0
+            epoch_ret = 0.0
+            epoch_ret_rep = 0.0
+            n_steps   = 0
+
+            v_f  = v_f.to(self.device, non_blocking=True)
+            delta_r = delta_r.to(self.device, non_blocking=True)
+    
+            # Cycle forget loader to match retain loader length
+            forget_cycle = itertools.cycle(unlearn_loader)
+    
+            for x_retain, y_retain in retain_loader:
+                x_forget, y_forget = next(forget_cycle)
+    
+                x_retain, y_retain = x_retain.to(self.device, non_blocking=True), y_retain.to(self.device, non_blocking=True)
+                x_forget, y_forget = x_forget.to(self.device, non_blocking=True), y_forget.to(self.device, non_blocking=True)
+                
+                with torch.no_grad():
+                    orig_forget_rep   = self.original_model.feature_extractor(x_forget)     # (B, D)
+                    orig_retain_rep   = self.original_model.feature_extractor(x_retain)
+                    
+                    orig_forget_logit = self.original_model.classifier_head(orig_forget_rep)
+                    orig_retain_logit = self.original_model.classifier_head(orig_retain_rep)
+                    
+                    target_forget_rep = orig_forget_rep + self.eta * v_f.unsqueeze(0)         # (B, D)
+                    target_retain_rep = orig_retain_rep + self.zeta * delta_r.unsqueeze(0)
+            
+                unlearn_forget_rep = self.unlearn_model.feature_extractor(x_forget)          # (B, D)
+                unlearn_retain_rep = self.unlearn_model.feature_extractor(x_retain)
+
+                unlearn_forget_logit = self.unlearn_model.classifier_head(unlearn_forget_rep)   # (B, C)
+                unlearn_retain_logit = self.unlearn_model.classifier_head(unlearn_retain_rep)
+                
+                # --- losses ---
+                L_dir = F.mse_loss(unlearn_forget_rep, target_forget_rep)
+                L_ret_rep = F.mse_loss(unlearn_retain_rep, target_retain_rep)
+                L_for = -self.compute_logit_loss(unlearn_forget_logit, orig_forget_logit, y_forget, self.forget_loss_type)
+                L_ret = self.compute_logit_loss(unlearn_retain_logit, orig_retain_logit, y_retain, self.retain_loss_type)
+
+                loss = (self.lambda_dir * L_dir  +
+                        self.lambda_for * L_for  +
+                        self.lambda_ret * L_ret  +
+                        self.lambda_ret_rep * L_ret_rep)
+    
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+    
+                epoch_dir += L_dir.item()
+                epoch_for += L_for.item()
+                epoch_ret += L_ret.item()
+                epoch_ret_rep += L_ret_rep.item()
+                n_steps   += 1
+    
+            print(f"Epoch [{epoch+1:>2}/{self.epochs}]  "
+              f"L_dir: {epoch_dir/n_steps:.4f}  "
+              f"L_forget ({self.forget_loss_type}): {epoch_for/n_steps:.4f}  "
+              f"L_retain ({self.retain_loss_type}): {epoch_ret/n_steps:.4f}  "
+              f"L_retain_Rep: {epoch_ret_rep/n_steps:.4f}")
+    
+        return self.unlearn_model

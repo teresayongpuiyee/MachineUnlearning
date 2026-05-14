@@ -7,8 +7,10 @@ from torch.utils.data import DataLoader, ConcatDataset
 import argparse
 from copy import deepcopy
 import random
+from model import models
+from src import utils as src_utils
 from unlearn_strategies import utils, unlearn
-from unlearn_strategies.unlearn import FGSM, ParameterPerturber, DistillKL, adjust_learning_rate, train_distill
+from unlearn_strategies.unlearn import FGSM, ParameterPerturber, DistillKL, adjust_learning_rate, train_distill, RADU
 import numpy as np
 from tqdm import tqdm
 from collections import OrderedDict
@@ -827,3 +829,35 @@ def pour_d(
     logger.info("Mean absolute value of feature-weight dot product: %f", dot)
     
     return pour_d_model
+
+def radu(
+    args: argparse.Namespace,
+    model: torch.nn.Module,
+    unlearn_loader: DataLoader,
+    retain_loader: DataLoader,
+    num_classes: int,
+    num_channels: int,
+    device
+) -> torch.nn.Module:
+    
+    radu_instance = RADU(args, model, device)
+    
+    if args.real_retrain:
+        print("Using actual retrain direction for RADU (upper-bound PoC)")
+        retrain_model_path = args.model_root + "/retrain.pt"
+        retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        src_utils.load_model_weights(model=retrain_model, model_path=retrain_model_path, device=device)
+    else:
+        retrain_model = None
+
+    # --- compute v_f using actual retrain direction (upper-bound PoC) ---
+    print("\nComputing projected forget shift direction v_f ...")
+    v_f, delta_r = radu_instance.compute_vf(unlearn_loader, retain_loader, retrain_model)
+ 
+    # --- train ---
+    print("\nStarting RADU training ...")
+    unlearn_model = radu_instance.train_radu(
+        unlearn_loader, retain_loader, v_f, delta_r
+    )
+
+    return unlearn_model

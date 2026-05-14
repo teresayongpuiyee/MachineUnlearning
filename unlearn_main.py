@@ -59,6 +59,8 @@ parser.add_argument("-linear_probe_lr", type=float, default= 1e-3, help='Learnin
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
+parser.add_argument("-unlearn_config", type= str, help= "Unlearn method configuration file path")
+
 
 args = parser.parse_args()
 
@@ -74,6 +76,12 @@ def main(args) -> None:
 
         config_dict.update(train_config)
         # Convert the final dictionary back to an argparse-like object (Namespace)
+        args = argparse.Namespace(**config_dict)
+    elif args.unlearn_config is not None:
+        with open(f"./{exp_name}/{args.unlearn_config}", 'r') as f:
+            unlearn_config = yaml.safe_load(f)
+
+        config_dict.update(unlearn_config)
         args = argparse.Namespace(**config_dict)
 
     output_path = f"./{exp_name}/{args.unlearn_class}/unlearn_outputs/"
