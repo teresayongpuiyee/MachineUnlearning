@@ -166,10 +166,10 @@ class ResNet(nn.Module):
         x = self.conv4_x(x)
         x = self.conv5_x(x)
         x = self.avg_pool(x)
+        x = x.view(x.size(0), -1)
         return x
     
     def classifier_head(self, x):
-        x = x.view(x.size(0), -1)
         x = self.fc(x)
         return x
 
@@ -193,7 +193,9 @@ class TimmResNet(nn.Module):
         features = self.model.forward_features(x)
         pooled = self.model.forward_head(features, pre_logits=True)
         return pooled
-
+    
+    def classifier_head(self, x):
+        return self.model.fc(x)
 
 class TimmViT(nn.Module):
     def __init__(self, vit_type = 'vit_small_patch8_224', num_classes=10, pretrained=False):
@@ -207,3 +209,6 @@ class TimmViT(nn.Module):
         features = self.model.forward_features(x)
         pooled = self.model.forward_head(features, pre_logits=True)
         return pooled
+
+    def classifier_head(self, x):
+        return self.model.head(x)

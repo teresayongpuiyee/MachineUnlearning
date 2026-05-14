@@ -20,7 +20,7 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
 
         # Extract features for all three models
         for model_key, model in model_dict.items():
-            h = model.feature_extractor(x).view(x.size(0), -1)
+            h = model.feature_extractor(x)
             if mean_dict[model_key] is None:
                 mean_dict[model_key] = torch.zeros(h.size(1), device=device)
             mean_dict[model_key] += h.sum(dim=0)

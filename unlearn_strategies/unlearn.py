@@ -705,7 +705,6 @@ class POUR_P(nn.Module):
 
     def feature_extractor(self, x):
         feat = self.model.feature_extractor(x)
-        feat = torch.flatten(feat, 1)  # (N,D)
 
         # scalar projection onto direction
         scalar_proj = feat @ self.unit_w_c  # (N,D) @ (D,) -> (N,)
@@ -714,10 +713,9 @@ class POUR_P(nn.Module):
         parallel = scalar_proj.unsqueeze(1) * self.unit_w_c  # (N, 1) * (1, D) -> (N, D)
         orthogonal = feat - parallel
         
-        return orthogonal.unsqueeze(-1).unsqueeze(-1)
+        return orthogonal
     
     def classifier_head(self, x):
-        x = x.view(x.size(0), -1)
         x = utils.get_fc(self.model)(x)
         return x
 
@@ -782,10 +780,8 @@ def pour_distill(
 
             with torch.no_grad():
                 teacher_feat = teacher_model.feature_extractor(x)   # (N, D)
-                teacher_feat = torch.flatten(teacher_feat, 1)
 
             student_feat = student_model.feature_extractor(x)
-            student_feat = torch.flatten(student_feat, 1)                 # (N, D)
 
             loss = F.mse_loss(student_feat, teacher_feat)
 

@@ -819,7 +819,6 @@ def pour_d(
 
     with torch.no_grad():
         feat = pour_d_model.feature_extractor(x)
-        feat = torch.flatten(feat,1)
     
     w_c = utils.get_fc(pour_d_model).weight[unlearn_class]
 

@@ -53,7 +53,6 @@ def get_representations(
             batch = [tensor.to(next(model.parameters()).device, non_blocking=True) for tensor in batch]
             data, target = batch
             feat = model.feature_extractor(data)
-            feat = feat.view(feat.size(0), -1)
             reps.append(feat.detach().cpu())
             all_labels.append(target.cpu())
     return torch.cat(reps, dim=0), torch.cat(all_labels, dim=0)
@@ -462,7 +461,6 @@ def linear_probing(
     dummy = next(iter(train_loader))[0].to(device)
     with torch.no_grad():
         feat = model.feature_extractor(dummy)
-        feat = feat.view(feat.size(0), -1)
     head = nn.Linear(feat.size(1), num_classes).to(device)
     nn.init.xavier_normal_(head.weight)
     nn.init.zeros_(head.bias)
@@ -485,7 +483,6 @@ def linear_probing(
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
             with torch.no_grad():
                 feat = model.feature_extractor(x)
-                feat = feat.view(feat.size(0), -1)
             logits = head(feat)
             loss = criterion(logits, y)
             optimizer.zero_grad()
@@ -502,7 +499,6 @@ def linear_probing(
             for x, y in loader:
                 x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
                 feat = model.feature_extractor(x)
-                feat = feat.view(feat.size(0), -1)
                 logits = head(feat)
                 pred = logits.argmax(dim=1)
                 correct += (pred == y).sum().item()
