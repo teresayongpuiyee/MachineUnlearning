@@ -41,7 +41,8 @@ parser.add_argument("-unlearn_method", type= str, default= "lipschitz",
                               "unsir",
                               "ssd",
                               "pour_p",
-                              "pour_d"],
+                              "pour_d",
+                              "radu"],
                     help= "Baselines unlearn method")
 
 parser.add_argument("-model_path", type= str,
