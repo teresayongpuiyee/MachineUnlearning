@@ -921,6 +921,7 @@ class RADU:
 
             self.unlearn_model.train()
 
+            epoch_loss = 0.0
             epoch_dir = 0.0
             epoch_for = 0.0
             epoch_ret = 0.0
@@ -969,7 +970,8 @@ class RADU:
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
-    
+
+                epoch_loss += loss.item()
                 epoch_dir += L_dir.item()
                 epoch_for += L_for.item()
                 epoch_ret += L_ret.item()
@@ -977,6 +979,7 @@ class RADU:
                 n_steps   += 1
     
             print(f"Epoch [{epoch+1:>2}/{self.epochs}]  "
+              f"L_loss: {epoch_loss/n_steps:.4f}  "
               f"L_dir: {epoch_dir/n_steps:.4f}  "
               f"L_forget ({self.forget_loss_type}): {epoch_for/n_steps:.4f}  "
               f"L_retain ({self.retain_loss_type}): {epoch_ret/n_steps:.4f}  "
