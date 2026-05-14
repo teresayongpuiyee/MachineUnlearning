@@ -837,7 +837,8 @@ def radu(
     retain_loader: DataLoader,
     num_classes: int,
     num_channels: int,
-    device
+    device,
+    **kwargs,
 ) -> torch.nn.Module:
     
     radu_instance = RADU(args, model, device)
