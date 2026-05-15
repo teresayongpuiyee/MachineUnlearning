@@ -910,7 +910,7 @@ class RADU:
 
             return F.kl_div(unlearn_log, orig_probs, reduction="batchmean")
 
-    def train_radu(self, unlearn_loader, retain_loader, v_f, delta_r):
+    def train_radu(self, logger, unlearn_loader, retain_loader, v_f, delta_r):
         """
         Main RADU training loop.
         forget_targets: dict {sample_idx: target_rep (D,)}
@@ -979,7 +979,7 @@ class RADU:
                 epoch_ret_rep += L_ret_rep.item()
                 n_steps   += 1
     
-            print(f"Epoch [{epoch+1:>2}/{self.epochs}]  "
+            logger.info(f"Epoch [{epoch+1:>2}/{self.epochs}]  "
               f"L_loss: {epoch_loss/n_steps:.4f}  "
               f"L_dir: {epoch_dir/n_steps:.4f}  "
               f"L_forget ({self.forget_loss_type}): {epoch_for/n_steps:.4f}  "

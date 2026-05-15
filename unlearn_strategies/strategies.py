@@ -831,6 +831,7 @@ def pour_d(
     return pour_d_model
 
 def radu(
+    logger,
     args: argparse.Namespace,
     model: torch.nn.Module,
     unlearn_loader: DataLoader,
@@ -844,7 +845,7 @@ def radu(
     radu_instance = RADU(args, model, device)
     
     if args.real_retrain:
-        print("Using actual retrain direction for RADU (upper-bound PoC)")
+        logger.info("Using actual retrain direction for RADU (upper-bound PoC)")
         retrain_model_path = args.model_root + "/retrain.pt"
         retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
         src_utils.load_model_weights(model=retrain_model, model_path=retrain_model_path, device=device)
@@ -858,7 +859,7 @@ def radu(
     # --- train ---
     print("\nStarting RADU training ...")
     unlearn_model = radu_instance.train_radu(
-        unlearn_loader, retain_loader, v_f, delta_r
+        logger, unlearn_loader, retain_loader, v_f, delta_r
     )
 
     return unlearn_model
