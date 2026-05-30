@@ -8,7 +8,7 @@ import itertools
 import torch
 from torch.nn import functional as F
 from torch.utils.data import DataLoader, Dataset, Subset, dataset
-from src import dataset, scheduler, metrics, analyse
+from src import dataset, scheduler, metrics, analyse, repr_metrics
 from unlearn_strategies import utils
 import numpy as np
 import torch.distributions as distributions
@@ -856,13 +856,18 @@ class RADU:
                 "original": self.original_model,
                 "retrain": retrained_model,
             }
-            mean_forget_reps_dict = analyse.extract_representation_from_n_models(model_dict, forget_loader, self.device, reduction="mean")
-            mean_retain_reps_dict = analyse.extract_representation_from_n_models(model_dict, retain_loader, self.device, reduction="mean")
+            forget_reps_dict = analyse.extract_representation_from_n_models(model_dict, forget_loader, self.device, reduction="none")
+            retain_reps_dict = analyse.extract_representation_from_n_models(model_dict, retain_loader, self.device, reduction="none")
             
-            orig_forget = mean_forget_reps_dict["original"]
-            ret_forget = mean_forget_reps_dict["retrain"]
-            orig_retain = mean_retain_reps_dict["original"]
-            ret_retain = mean_retain_reps_dict["retrain"]
+            raw_orig_forget = forget_reps_dict["original"]
+            raw_ret_forget = forget_reps_dict["retrain"]
+            raw_orig_retain = retain_reps_dict["original"]
+            raw_ret_retain = retain_reps_dict["retrain"]
+
+            orig_forget = raw_orig_forget.mean(dim=0)
+            ret_forget = raw_ret_forget.mean(dim=0)
+            orig_retain = raw_orig_retain.mean(dim=0)
+            ret_retain = raw_ret_retain.mean(dim=0)
         
             delta_f = ret_forget - orig_forget   # (D,)
             delta_r = ret_retain - orig_retain   # (D,)
@@ -880,6 +885,19 @@ class RADU:
                                         delta_r_hat.unsqueeze(0)).item()
         print(f"[v_f] cos(Δ_f, Δ_r) before projection: {cos_before:.4f}")
         print(f"[v_f] cos(v_f,  Δ_r) after  projection: {cos_after:.4f}  (should ≈ 0)")
+
+        if retrain_model is not None:
+            target_ortho_forget = raw_orig_forget + v_f.unsqueeze(0)
+            target_forget = raw_orig_forget + delta_f.unsqueeze(0)
+            target_retain = raw_orig_retain + delta_r.unsqueeze(0)
+
+            ortho_forget_cka = repr_metrics.linear_cka(target_ortho_forget, raw_ret_forget)
+            forget_cka = repr_metrics.linear_cka(target_forget, raw_ret_forget)
+            retain_cka = repr_metrics.linear_cka(target_retain, raw_ret_retain)
+
+            print(f"CKA between target orthogonalized forget and retrain forget: {ortho_forget_cka:.4f}")
+            print(f"CKA between target forget and retrain forget: {forget_cka:.4f}")
+            print(f"CKA between target retain and retrain retain: {retain_cka:.4f}")
     
         return v_f, delta_r   # (D,)
     
@@ -970,7 +988,9 @@ class RADU:
                 # --- losses ---
                 L_dir = F.mse_loss(unlearn_forget_rep, target_forget_rep)
                 L_ret_rep = F.mse_loss(unlearn_retain_rep, target_retain_rep)
-                L_for = -self.compute_logit_loss(unlearn_forget_logit, orig_forget_logit, y_forget, self.forget_loss_type)
+                L_for = self.compute_logit_loss(unlearn_forget_logit, orig_forget_logit, y_forget, self.forget_loss_type)
+                if self.forget_loss_type != "kl_uniform":
+                    L_for = -L_for   # maximize forget loss if not already KL with uniform (which already pushes away from original distribution)
                 L_ret = self.compute_logit_loss(unlearn_retain_logit, orig_retain_logit, y_retain, self.retain_loss_type)
 
                 loss = (self.lambda_dir * L_dir  +
