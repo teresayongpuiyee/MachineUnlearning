@@ -187,22 +187,25 @@ def main(args) -> None:
         train_reps = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
         test_train_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
         #test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        retain_retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         #forget_retain_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         forget_unlearn_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
         #test_unlearn_reps = analyse.project_representations(test_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)       
+        retain_train_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+        forget_train_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
     else:
         test_train_reps = test_reps
         #test_retain_reps = test_reps
         #forget_retain_reps = forget_reps       
         forget_unlearn_reps = forget_reps
         #test_unlearn_reps = test_reps
+        retain_retain_reps = retain_reps
 
 
     logger.info(f"Representation MIA evaluation...")
     ## Bad Teacher equivalent Rep-MIA with balance and normalize features
     #badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
-    #    retain_reps=retain_reps,
+    #    retain_reps=retain_retain_reps,
     #    forget_reps=forget_retain_reps,
     #    test_reps=test_retain_reps,
     #    retain_labels=retain_labels,
@@ -285,15 +288,20 @@ def main(args) -> None:
     if len(args.project_method) > 0:
         retain_ori_reps = analyse.project_representations(retain_ori_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         forget_ori_reps = analyse.project_representations(forget_ori_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
-        retain_retrain_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_retrain_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)        
-    
+        retain_retrain_retain_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        forget_retrain_unlearn_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
+        retain_retrain_train_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+        forget_retrain_train_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)          
+    else:
+        retain_retrain_retain_reps = retain_retrain_reps
+        forget_retrain_unlearn_reps = forget_retrain_reps
+
     cka_f_o = repr_metrics.linear_cka(forget_unlearn_reps, forget_ori_reps)
-    cka_r_o = repr_metrics.linear_cka(retain_reps, retain_ori_reps)
+    cka_r_o = repr_metrics.linear_cka(retain_retain_reps, retain_ori_reps)
     logger.info(f"CKA between unlearned and original model: forget={cka_f_o}, retain={cka_r_o}")
 
-    cka_f_r = repr_metrics.linear_cka(forget_unlearn_reps, forget_retrain_reps)
-    cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
+    cka_f_r = repr_metrics.linear_cka(forget_unlearn_reps, forget_retrain_unlearn_reps)
+    cka_r_r = repr_metrics.linear_cka(retain_retain_reps, retain_retrain_retain_reps)
     logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
 
     cka_metrics_dict = {
@@ -302,6 +310,12 @@ def main(args) -> None:
         "forget_unlearn_retrain": cka_f_r,
         "retain_unlearn_retrain": cka_r_r,
     }
+
+    if len(args.project_method) > 0:
+        cka_f_r_train = repr_metrics.linear_cka(forget_train_reps, forget_retrain_train_reps)
+        cka_r_r_train = repr_metrics.linear_cka(retain_train_reps, retain_retrain_train_reps)
+        cka_metrics_dict["forget_unlearn_retrain_train"] = cka_f_r_train
+        cka_metrics_dict["retain_unlearn_retrain_train"] = cka_r_r_train
 
     # RUS
     rus_o = repr_metrics.representation_unlearning_score(cka_f_o, cka_r_o, original=True)
