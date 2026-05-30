@@ -202,11 +202,11 @@ def main(args) -> None:
 
     logger.info(f"Unlearned representation")
 
-    bin_probe_acc = repr_metrics.binary_forget_probe(
-        retain_eval_loader=retain_eval_loader,
-        unlearn_eval_loader=unlearn_eval_loader,
-        unlearned_model=unlearned_model
-    )
+    #bin_probe_acc = repr_metrics.binary_forget_probe(
+    #    retain_eval_loader=retain_eval_loader,
+    #    unlearn_eval_loader=unlearn_eval_loader,
+    #    unlearned_model=unlearned_model
+    #)
 
     linear_probe_acc = repr_metrics.linear_probing(
         train_loader= train_aug_loader,
@@ -225,7 +225,7 @@ def main(args) -> None:
         "classification/unlearn_acc": unlearn_acc,
         "classification/test_retain_acc": test_retain_acc,
         "classification/test_unlearn_acc": test_unlearn_acc,
-        "representation/binary_probe_acc": bin_probe_acc,
+        #"representation/binary_probe_acc": bin_probe_acc,
         "representation/linear_probe_acc": linear_probe_acc,
         "runtime_sec": runtime
     }

@@ -113,25 +113,25 @@ def main(args) -> None:
         #    model=unlearned_model)
         #logger.info(f"Bad T MIA: {badt_mia}")
 
-        # Bad Teacher equivalent MIA with balance and normalize features
-        badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
-            retain_reps=retain_enp,
-            forget_reps=forget_enp,
-            test_reps=test_enp,
-            retain_labels=retain_enp_labels,
-            test_labels=test_enp_labels,
-            unlearn_class=args.unlearn_class
-        )
-        logger.info(f"Bad T MIA: {badt_mia_asr}")
-
-        # SCRUB equivalent MIA with balance and normalize features
-        scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
-            forget_reps=forget_enp,
-            test_reps=test_enp,
-            test_labels=test_enp_labels,
-            unlearn_class=args.unlearn_class
-        )
-        logger.info(f"SCRUB MIA: {scrub_mia_asr}")
+        ## Bad Teacher equivalent MIA with balance and normalize features
+        #badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
+        #    retain_reps=retain_enp,
+        #    forget_reps=forget_enp,
+        #    test_reps=test_enp,
+        #    retain_labels=retain_enp_labels,
+        #    test_labels=test_enp_labels,
+        #    unlearn_class=args.unlearn_class
+        #)
+        #logger.info(f"Bad T MIA: {badt_mia_asr}")
+#
+        ## SCRUB equivalent MIA with balance and normalize features
+        #scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
+        #    forget_reps=forget_enp,
+        #    test_reps=test_enp,
+        #    test_labels=test_enp_labels,
+        #    unlearn_class=args.unlearn_class
+        #)
+        #logger.info(f"SCRUB MIA: {scrub_mia_asr}")
 
         # POUR
         pour_mia_metrics, pour_mia_asr = repr_metrics.pour_rmia(
@@ -143,28 +143,28 @@ def main(args) -> None:
         )
         logger.info(f"POUR MIA: {pour_mia_asr}")
 
-        # SURE
-        sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
-            train_reps=train_enp,
-            test_reps=test_enp,
-            train_labels=train_enp_labels,
-            test_labels=test_enp_labels,
-            unlearn_class=args.unlearn_class,
-        )
-        logger.info(f"SURE MIA: {sure_mia_asr}")
+        ## SURE
+        #sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
+        #    train_reps=train_enp,
+        #    test_reps=test_enp,
+        #    train_labels=train_enp_labels,
+        #    test_labels=test_enp_labels,
+        #    unlearn_class=args.unlearn_class,
+        #)
+        #logger.info(f"SURE MIA: {sure_mia_asr}")
 
         cls_metrics_dict = {
             # attack model metrics
-            "badt_mia": badt_mia_metrics,
-            "scrub_mia": scrub_mia_metrics,
+            #"badt_mia": badt_mia_metrics,
+            #"scrub_mia": scrub_mia_metrics,
             "pour_mia": pour_mia_metrics,
-            "sure_mia": sure_mia_metrics,
+            #"sure_mia": sure_mia_metrics,
             
             # forget asr
-            "badt_mia_asr": badt_mia_asr,
-            "scrub_mia_asr": scrub_mia_asr,
+            #"badt_mia_asr": badt_mia_asr,
+            #"scrub_mia_asr": scrub_mia_asr,
             "pour_mia_asr": pour_mia_asr,
-            "sure_mia_asr": sure_mia_asr,
+            #"sure_mia_asr": sure_mia_asr,
         }
 
     # Representation-level evaluation
@@ -186,39 +186,39 @@ def main(args) -> None:
 
         train_reps = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
         test_train_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
-        test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        #test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_retain_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+        #forget_retain_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
         forget_unlearn_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
-        test_unlearn_reps = analyse.project_representations(test_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)       
+        #test_unlearn_reps = analyse.project_representations(test_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)       
     else:
         test_train_reps = test_reps
-        test_retain_reps = test_reps
-        forget_retain_reps = forget_reps       
+        #test_retain_reps = test_reps
+        #forget_retain_reps = forget_reps       
         forget_unlearn_reps = forget_reps
-        test_unlearn_reps = test_reps
+        #test_unlearn_reps = test_reps
 
 
     logger.info(f"Representation MIA evaluation...")
-    # Bad Teacher equivalent Rep-MIA with balance and normalize features
-    badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
-        retain_reps=retain_reps,
-        forget_reps=forget_retain_reps,
-        test_reps=test_retain_reps,
-        retain_labels=retain_labels,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class
-    )
-    logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
-
-    # SCRUB equivalent Rep-MIA with balance and normalize features
-    scrub_rep_mia_metrics, scrub_rep_mia_asr = repr_metrics.scrub_rep_mia(
-        forget_reps=forget_unlearn_reps,
-        test_reps=test_unlearn_reps,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class
-    )
-    logger.info(f"SCRUB rep-MIA: {scrub_rep_mia_asr}")
+    ## Bad Teacher equivalent Rep-MIA with balance and normalize features
+    #badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
+    #    retain_reps=retain_reps,
+    #    forget_reps=forget_retain_reps,
+    #    test_reps=test_retain_reps,
+    #    retain_labels=retain_labels,
+    #    test_labels=test_labels,
+    #    unlearn_class=args.unlearn_class
+    #)
+    #logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
+#
+    ## SCRUB equivalent Rep-MIA with balance and normalize features
+    #scrub_rep_mia_metrics, scrub_rep_mia_asr = repr_metrics.scrub_rep_mia(
+    #    forget_reps=forget_unlearn_reps,
+    #    test_reps=test_unlearn_reps,
+    #    test_labels=test_labels,
+    #    unlearn_class=args.unlearn_class
+    #)
+    #logger.info(f"SCRUB rep-MIA: {scrub_rep_mia_asr}")
 
     # POUR
     pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
@@ -230,28 +230,28 @@ def main(args) -> None:
     )
     logger.info(f"POUR rMIA: {pour_rmia_asr}")
 
-    # SURE
-    sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
-        train_reps=train_reps,
-        test_reps=test_train_reps,
-        train_labels=train_labels,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class,
-    )
-    logger.info(f"SURE MIARS: {sure_miars_asr}")
+    ## SURE
+    #sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
+    #    train_reps=train_reps,
+    #    test_reps=test_train_reps,
+    #    train_labels=train_labels,
+    #    test_labels=test_labels,
+    #    unlearn_class=args.unlearn_class,
+    #)
+    #logger.info(f"SURE MIARS: {sure_miars_asr}")
 
     rep_metrics_dict = {       
         # attack model metrics
-        "badt_rep_mia": badt_rep_mia_metrics,
-        "scrub_rep_mia": scrub_rep_mia_metrics,
+        #"badt_rep_mia": badt_rep_mia_metrics,
+        #"scrub_rep_mia": scrub_rep_mia_metrics,
         "pour_rmia": pour_rmia_metrics,
-        "sure_miars": sure_miars_metrics,
+        #"sure_miars": sure_miars_metrics,
         
         # forget asr
-        "badt_rep_mia_asr": badt_rep_mia_asr,
-        "scrub_rep_mia_asr": scrub_rep_mia_asr,
+        #"badt_rep_mia_asr": badt_rep_mia_asr,
+        #"scrub_rep_mia_asr": scrub_rep_mia_asr,
         "pour_rmia_asr": pour_rmia_asr,
-        "sure_miars_asr": sure_miars_asr,
+        #"sure_miars_asr": sure_miars_asr,
     }
     
     if len(args.project_method) == 0 and num_classes <= 20:  # Only visualize when not projecting and number of classes is manageable
