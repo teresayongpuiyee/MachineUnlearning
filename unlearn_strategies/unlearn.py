@@ -832,6 +832,7 @@ class RADU:
         
         self.lr = args.lr
         self.epochs = args.epochs
+        self.weight_decay = args.weight_decay
         
         self.lambda_dir = args.lambda_dir
         self.lambda_ret = args.lambda_ret
@@ -855,8 +856,8 @@ class RADU:
                 "original": self.original_model,
                 "retrain": retrained_model,
             }
-            mean_forget_reps_dict = analyse.extract_mean_representation_from_n_models(model_dict, forget_loader, self.device)
-            mean_retain_reps_dict = analyse.extract_mean_representation_from_n_models(model_dict, retain_loader, self.device)
+            mean_forget_reps_dict = analyse.extract_representation_from_n_models(model_dict, forget_loader, self.device, reduction="mean")
+            mean_retain_reps_dict = analyse.extract_representation_from_n_models(model_dict, retain_loader, self.device, reduction="mean")
             
             orig_forget = mean_forget_reps_dict["original"]
             ret_forget = mean_forget_reps_dict["retrain"]
@@ -906,16 +907,25 @@ class RADU:
             unlearn_log = F.log_softmax(logits, dim=-1)
             orig_probs = F.softmax(original_logits, dim=-1)   # (B, C)
 
-            #uniform   = torch.full_like(unlearn_log, 1.0 / num_classes)       # (B, C)
-
             return F.kl_div(unlearn_log, orig_probs, reduction="batchmean")
+
+        elif loss_type == "kl_uniform":
+            unlearn_log = F.log_softmax(logits, dim=-1)
+
+            num_classes = logits.shape[1]
+            uniform   = torch.full_like(unlearn_log, 1.0 / num_classes)       # (B, C)
+
+            return F.kl_div(unlearn_log, uniform, reduction="batchmean")
 
     def train_radu(self, logger, unlearn_loader, retain_loader, v_f, delta_r):
         """
         Main RADU training loop.
         forget_targets: dict {sample_idx: target_rep (D,)}
         """
-        optimizer = torch.optim.Adam(self.unlearn_model.parameters(), lr=self.lr)
+        logger.info(f"Epochs: {self.epochs}, LR: {self.lr}, WD: {self.weight_decay}")
+        logger.info(f"Dir: {self.lambda_dir}, FOR: {self.lambda_for}, RET: {self.lambda_ret}, RET REP: {self.lambda_ret_rep}")
+        logger.info(f"eta: {self.eta}, zeta: {self.zeta}")
+        optimizer = torch.optim.Adam(self.unlearn_model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
         self.original_model.eval()
     
         for epoch in range(self.epochs):
