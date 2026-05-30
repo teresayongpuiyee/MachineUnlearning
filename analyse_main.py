@@ -97,7 +97,7 @@ def main(args) -> None:
     # cosine similarity
     logger.info("Computing representation shift alignment metrics...")
     logger.info("On training set...")
-    breakdown_train, cos_sim_train, mag_ratio_train, _ = analyse.compute_rep_shift_alignment(
+    breakdown_train, cos_sim_train, mag_ratio_train, mean_cosine_train, trans_cka_train, _ = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -109,7 +109,7 @@ def main(args) -> None:
     )
 
     logger.info("On retain set...")
-    breakdown_retain, cos_sim_retain, mag_ratio_retain, mean_reps_retain = analyse.compute_rep_shift_alignment(
+    breakdown_retain, cos_sim_retain, mag_ratio_retain, mean_cosine_retain, trans_cka_retain, mean_reps_retain = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -121,7 +121,7 @@ def main(args) -> None:
     )
 
     logger.info("On forget set...")
-    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn, mean_reps_unlearn = analyse.compute_rep_shift_alignment(
+    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn, mean_cosine_unlearn, trans_cka_unlearn, mean_reps_unlearn = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -139,9 +139,9 @@ def main(args) -> None:
     unlearn_ret_unl_cos_sim, retrain_ret_unl_cos_sim = analyse.compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn)
     
     dir_align = {
-        "train": {"breakdown": breakdown_train, "cosine_similarity": cos_sim_train, "magnitude_ratio": mag_ratio_train},
-        "retain": {"breakdown": breakdown_retain, "cosine_similarity": cos_sim_retain, "magnitude_ratio": mag_ratio_retain},
-        "unlearn": {"breakdown": breakdown_unlearn, "cosine_similarity": cos_sim_unlearn, "magnitude_ratio": mag_ratio_unlearn},
+        "train": {"breakdown": breakdown_train, "cosine_similarity": cos_sim_train, "magnitude_ratio": mag_ratio_train, "mean_cosine": mean_cosine_train, "trans_cka": trans_cka_train},
+        "retain": {"breakdown": breakdown_retain, "cosine_similarity": cos_sim_retain, "magnitude_ratio": mag_ratio_retain, "mean_cosine": mean_cosine_retain, "trans_cka": trans_cka_retain},
+        "unlearn": {"breakdown": breakdown_unlearn, "cosine_similarity": cos_sim_unlearn, "magnitude_ratio": mag_ratio_unlearn, "mean_cosine": mean_cosine_unlearn, "trans_cka": trans_cka_unlearn},
         "harmonic_mean_retain_unlearn": cos_sim_h_mean,
         "unlearn_ret_unl_cos_sim": unlearn_ret_unl_cos_sim,
         "retrain_ret_unl_cos_sim": retrain_ret_unl_cos_sim

@@ -3,14 +3,18 @@ import torch.nn.functional as F
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
+from src import repr_metrics
 
 @torch.no_grad()
-def extract_mean_representation_from_n_models(model_dict, dataloader, device):
-    mean_dict = dict()
+def extract_representation_from_n_models(model_dict, dataloader, device, reduction="mean"):
+    rep_dict = dict()
     
     for model_key, model in model_dict.items():
         model.eval()
-        mean_dict[model_key] = None
+        if reduction == "mean":
+            rep_dict[model_key] = None
+        else:
+            rep_dict[model_key] = []
     
     total_count = 0
 
@@ -21,15 +25,37 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
         # Extract features for all three models
         for model_key, model in model_dict.items():
             h = model.feature_extractor(x)
-            if mean_dict[model_key] is None:
-                mean_dict[model_key] = torch.zeros(h.size(1), device=device)
-            mean_dict[model_key] += h.sum(dim=0)
+            if reduction == "mean":
+                if rep_dict[model_key] is None:
+                    rep_dict[model_key] = torch.zeros(h.size(1), device=device)
+                rep_dict[model_key] += h.sum(dim=0)
+            else:
+                rep_dict[model_key].append(h)
 
-    # Calculate means
-    for model_key in mean_dict:
-        mean_dict[model_key] /= total_count
+    if reduction == "mean":
+        # Calculate means
+        for model_key in rep_dict:
+            rep_dict[model_key] /= total_count
+    else:
+        # Concatenate all representations
+        for model_key in rep_dict:
+            rep_dict[model_key] = torch.cat(rep_dict[model_key], dim=0)
 
-    return mean_dict
+    return rep_dict
+
+def compute_per_sample_rep_shift_similarity(reps_ori, reps_retrain, reps_unlearn):
+    shift_retrain = reps_retrain - reps_ori
+    shift_unlearn = reps_unlearn - reps_ori
+
+    # shape: [n] — one cosine similarity per sample pair
+    per_sample_cos_sim = F.cosine_similarity(shift_retrain, shift_unlearn, dim=1)
+
+    # scalar average
+    mean_cos_sim = per_sample_cos_sim.mean().item()
+
+    trans_cka = repr_metrics.linear_cka(shift_retrain, shift_unlearn)
+
+    return mean_cos_sim, trans_cka
 
 def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name):
     # Single pass over the data for mean representation extraction
@@ -38,12 +64,18 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         "retrain": retrain_model,
         "unlearn": unlearned_model
     }
-    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
-    mean_ori = mean_reps_dict["original"]
-    mean_retrain = mean_reps_dict["retrain"]
-    mean_unlearn = mean_reps_dict["unlearn"]
+    reps_dict = extract_representation_from_n_models(model_dict, dataloader, device, reduction="none")
+    reps_ori = reps_dict["original"]
+    reps_retrain = reps_dict["retrain"]
+    reps_unlearn = reps_dict["unlearn"]
 
-    visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
+    mean_ori = reps_ori.mean(dim=0)
+    mean_retrain = reps_retrain.mean(dim=0)
+    mean_unlearn = reps_unlearn.mean(dim=0)
+
+    mean_cos_sim, trans_cka = compute_per_sample_rep_shift_similarity(reps_ori, reps_retrain, reps_unlearn)
+
+    #visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
 
     # Compute shifts
     shift_retrain = mean_retrain - mean_ori
@@ -87,7 +119,14 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         "mean_unlearn": mean_unlearn
     }
 
-    return breakdown_metrics, round(shift_cos_sim, 4), round(mag_shift_ratio, 4), mean_reps
+    return (
+        breakdown_metrics, 
+        round(shift_cos_sim, 4), 
+        round(mag_shift_ratio, 4), 
+        round(mean_cos_sim, 4),
+        trans_cka,
+        mean_reps
+    )
 
 def calculate_harmonic_mean(sim_retain, sim_unlearn):
     """
@@ -190,7 +229,7 @@ def project_representations(
         "original": ori_model,
         "retrain": retrain_model,
     }
-    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+    mean_reps_dict = extract_representation_from_n_models(model_dict, dataloader, device, reduction="mean")
     
     # Move mean reps to CPU to match representations
     mean_ori = mean_reps_dict["original"].to(target_device)
