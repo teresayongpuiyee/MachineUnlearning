@@ -92,6 +92,7 @@ def badt_rep_mia(
     retain_labels: torch.tensor,
     test_labels: torch.tensor,
     unlearn_class: int,
+    seed: int = 42
 ) -> float:
     # Subsampling of retain data
     target_size = test_reps.shape[0]
@@ -101,7 +102,7 @@ def badt_rep_mia(
         indices,
         test_size=target_size,
         stratify=retain_labels.numpy(),
-        random_state=42
+        random_state=seed
     )
     retain_reps = retain_reps[sampled_indices]
     retain_labels = retain_labels[sampled_indices]
@@ -119,7 +120,7 @@ def badt_rep_mia(
         X_labels,
         test_size=0.2,
         stratify=strat_key,
-        random_state=42
+        random_state=seed
     )
 
     # Feature normalization
@@ -165,6 +166,7 @@ def scrub_rep_mia(
     test_reps: torch.tensor,
     test_labels: torch.tensor,
     unlearn_class: int,
+    seed: int = 42
 ) -> Tuple[dict, Optional[float]]:
     # Subsampling to balance Member (1) and Non-Member (0) classes
     target_size = forget_reps.shape[0]
@@ -175,7 +177,7 @@ def scrub_rep_mia(
             indices,
             test_size=target_size,
             stratify=test_labels.numpy(),
-            random_state=42
+            random_state=seed
         )
         test_reps = test_reps[sampled_indices]
         test_labels = test_labels[sampled_indices]
@@ -194,7 +196,7 @@ def scrub_rep_mia(
         X_labels,
         test_size=0.25,
         stratify=strat_key,   # Stratify using the combined key
-        random_state=42
+        random_state=seed
     )
 
     # Feature normalization
@@ -246,7 +248,8 @@ def pour_rmia(
     test_reps: torch.tensor,
     train_labels: torch.tensor,
     test_labels: torch.tensor,
-    unlearn_class: int
+    unlearn_class: int,
+    seed: int = 42
 ) -> Tuple[dict, Optional[float]]:
     """
     Representation-level membership-inference attack success rate on forget set. Perform a five-fold attack
@@ -270,7 +273,7 @@ def pour_rmia(
             indices,
             test_size=target_size,
             stratify=train_labels.numpy(),
-            random_state=42
+            random_state=seed
         )
         train_reps = train_reps[sampled_indices]
         train_labels = train_labels[sampled_indices]
@@ -283,7 +286,7 @@ def pour_rmia(
     strat_key = np.array([f"{lbl}_{mem}" for lbl, mem in zip(X_labels, y_full)])
 
     # Five-fold cross-validation attack
-    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=seed)
 
     results = {"train_acc": [], "train_f1": [], "test_acc": [], "test_f1": [], "forget_fpr": [], "forget_asr": []}
 
@@ -342,6 +345,7 @@ def sure_miars(
     test_labels: torch.tensor,
     unlearn_class: int,
     n_neighbors: int = 5,
+    seed: int = 42
 ) -> Tuple[dict, Optional[float]]:
     """
     Trains a KNN classifier to distinguish between train and test samples based on their representations,
@@ -366,7 +370,7 @@ def sure_miars(
             indices,
             test_size=target_size,
             stratify=train_labels.numpy(),
-            random_state=42
+            random_state=seed
         )
         train_reps = train_reps[sampled_indices]
         train_labels = train_labels[sampled_indices]
@@ -384,7 +388,7 @@ def sure_miars(
         X_labels,
         test_size=0.2,
         stratify=strat_key,   # Stratify using the combined key
-        random_state=42
+        random_state=seed
     )
 
     # Feature normalization
@@ -570,6 +574,7 @@ def visualize_tsne(
     n_iter: int = 1000,
     max_samples: int = 10000,
     tag: str = "",
+    seed: int = 42
 ):
     """
     Visualize representations using t-SNE.
@@ -593,7 +598,7 @@ def visualize_tsne(
             all_labels,
             train_size=max_samples,
             stratify=all_labels,  # preserves class ratios
-            random_state=42
+            random_state=seed
         )
 
     # Standardize
@@ -601,7 +606,7 @@ def visualize_tsne(
 
     # PCA for speed (retain 50 components or less if input dim < 50)
     if reps.shape[1] > 50:
-        reps = PCA(n_components=50, random_state=42).fit_transform(reps)
+        reps = PCA(n_components=50, random_state=seed).fit_transform(reps)
 
     # Adaptive perplexity
     perplexity = min(perplexity, max(5, len(reps) // 100))
@@ -612,7 +617,7 @@ def visualize_tsne(
         perplexity=perplexity,
         n_iter=n_iter,
         metric="euclidean",
-        random_state=42,
+        random_state=seed,
         n_jobs=-1,  # use all CPU cores
     )
     reps_2d = tsne.fit(reps)

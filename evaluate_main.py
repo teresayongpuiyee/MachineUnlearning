@@ -120,7 +120,8 @@ def main(args) -> None:
         #    test_reps=test_enp,
         #    retain_labels=retain_enp_labels,
         #    test_labels=test_enp_labels,
-        #    unlearn_class=args.unlearn_class
+        #    unlearn_class=args.unlearn_class,
+        #    seed=args.seed
         #)
         #logger.info(f"Bad T MIA: {badt_mia_asr}")
 #
@@ -129,7 +130,8 @@ def main(args) -> None:
         #    forget_reps=forget_enp,
         #    test_reps=test_enp,
         #    test_labels=test_enp_labels,
-        #    unlearn_class=args.unlearn_class
+        #    unlearn_class=args.unlearn_class,
+        #    seed=args.seed
         #)
         #logger.info(f"SCRUB MIA: {scrub_mia_asr}")
 
@@ -140,6 +142,7 @@ def main(args) -> None:
             train_labels=train_enp_labels,
             test_labels=test_enp_labels,
             unlearn_class=args.unlearn_class,
+            seed=args.seed
         )
         logger.info(f"POUR MIA: {pour_mia_asr}")
 
@@ -150,6 +153,7 @@ def main(args) -> None:
         #    train_labels=train_enp_labels,
         #    test_labels=test_enp_labels,
         #    unlearn_class=args.unlearn_class,
+        #    seed=args.seed
         #)
         #logger.info(f"SURE MIA: {sure_mia_asr}")
 
@@ -207,7 +211,8 @@ def main(args) -> None:
     #    test_reps=test_retain_reps,
     #    retain_labels=retain_labels,
     #    test_labels=test_labels,
-    #    unlearn_class=args.unlearn_class
+    #    unlearn_class=args.unlearn_class,
+    #    seed=args.seed
     #)
     #logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
 #
@@ -216,7 +221,8 @@ def main(args) -> None:
     #    forget_reps=forget_unlearn_reps,
     #    test_reps=test_unlearn_reps,
     #    test_labels=test_labels,
-    #    unlearn_class=args.unlearn_class
+    #    unlearn_class=args.unlearn_class,
+    #    seed=args.seed
     #)
     #logger.info(f"SCRUB rep-MIA: {scrub_rep_mia_asr}")
 
@@ -227,6 +233,7 @@ def main(args) -> None:
         train_labels=train_labels,
         test_labels=test_labels,
         unlearn_class=args.unlearn_class,
+        seed=args.seed
     )
     logger.info(f"POUR rMIA: {pour_rmia_asr}")
 
@@ -237,6 +244,7 @@ def main(args) -> None:
     #    train_labels=train_labels,
     #    test_labels=test_labels,
     #    unlearn_class=args.unlearn_class,
+    #    seed=args.seed
     #)
     #logger.info(f"SURE MIARS: {sure_miars_asr}")
 
@@ -260,7 +268,8 @@ def main(args) -> None:
             all_labels=train_labels,
             unlearn_method=unlearn_method,
             save_path=output_path, 
-            tag="rep"
+            tag="rep",
+            seed=args.seed
         )
         logger.info("t-SNE visualization saved.")
 
