@@ -110,6 +110,7 @@ def gradient_ascent(
 # Bad Teacher: https://github.com/vikram2000b/bad-teaching-unlearning
 def bad_teacher(
     logger,
+    args,
     model: torch.nn.Module,
     unlearning_teacher: torch.nn.Module,
     unlearn_loader: DataLoader,
@@ -137,7 +138,8 @@ def bad_teacher(
         batch_size=256,
         device=device,
         KL_temperature=KL_temperature,
-        num_workers= unlearn_loader.num_workers
+        num_workers= unlearn_loader.num_workers,
+        seed=args.seed,
     )
 
     return student_model
@@ -255,6 +257,7 @@ def scrub(
 # Amnesiac Unlearning: https://github.com/lmgraves/AmnesiacML
 def amnesiac(
     logger,
+    args,
     model: torch.nn.Module,
     unlearn_class: int,
     unlearn_loader: DataLoader,
@@ -276,8 +279,10 @@ def amnesiac(
     for x, y in retain_loader.dataset:
         unlearning_trainset.append((x, y))
 
+    unlearning_train_g = torch.Generator()
+    unlearning_train_g.manual_seed(args.seed)
     unlearning_train_set_dl = DataLoader(
-        unlearning_trainset, 64, pin_memory=True, shuffle=True, num_workers=unlearn_loader.num_workers, persistent_workers=True
+        unlearning_trainset, 64, pin_memory=True, shuffle=True, num_workers=unlearn_loader.num_workers, persistent_workers=True, generator=unlearning_train_g
     )
 
     unlearned_model = utils.training_optimization(
@@ -648,6 +653,7 @@ def fisher(
 # Selective Impair and Repair: https://github.com/vikram2000b/Fast-Machine-Unlearning
 def unsir(
     logger,
+    args,
     model: torch.nn.Module,
     unlearn_class: int,
     unlearn_loader: DataLoader,
@@ -683,7 +689,8 @@ def unsir(
         retain_samples,
         batch_size=noise_batch_size,
         num_workers=unlearn_loader.num_workers,
-        device=device
+        device=device,
+        seed=args.seed
     )
     # impair step
     model = utils.training_optimization(
@@ -708,8 +715,10 @@ def unsir(
             )
         )
 
+    healer_g = torch.Generator()
+    healer_g.manual_seed(args.seed)
     heal_loader = torch.utils.data.DataLoader(
-        other_samples, batch_size=256, shuffle=True, num_workers=retain_loader.num_workers, pin_memory=True, persistent_workers=True
+        other_samples, batch_size=256, shuffle=True, num_workers=retain_loader.num_workers, pin_memory=True, persistent_workers=True, generator=healer_g
     )
     model = utils.training_optimization(
         logger,

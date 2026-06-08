@@ -6,6 +6,7 @@ from torch.utils.data import DataLoader
 from unlearn_strategies import strategies
 import time
 import yaml
+import torch
 
 parser = argparse.ArgumentParser()
 # Device
@@ -128,12 +129,41 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    train_aug_loader = DataLoader(train_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
-    retain_aug_loader = DataLoader(retain_aug_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    train_aug_g = torch.Generator()
+    train_aug_g.manual_seed(args.seed)
+    train_aug_loader = DataLoader(
+        train_aug_dataset, 
+        batch_size=args.batch_size, 
+        shuffle=True, 
+        num_workers=args.num_workers, 
+        pin_memory=True, 
+        persistent_workers=True,
+        worker_init_fn=utils.seed_worker,
+        generator=train_aug_g
+    )
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
-    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
-    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
+    retain_aug_g = torch.Generator()
+    retain_aug_g.manual_seed(args.seed)
+    retain_aug_loader = DataLoader(
+        retain_aug_dataset, 
+        batch_size=args.batch_size, 
+        shuffle=True, 
+        num_workers=args.num_workers, 
+        pin_memory=True, 
+        persistent_workers=True,
+        worker_init_fn=utils.seed_worker,
+        generator=retain_aug_g
+    )
+
+    train_g = torch.Generator()
+    train_g.manual_seed(args.seed)
+    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True, generator=train_g)
+    retain_g = torch.Generator()
+    retain_g.manual_seed(args.seed)
+    retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True, generator=retain_g)
+    unlearn_g = torch.Generator()
+    unlearn_g.manual_seed(args.seed)
+    unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=True, num_workers=args.num_workers, pin_memory=True, persistent_workers=True, generator=unlearn_g)
 
     test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     test_retain_loader = DataLoader(test_retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
