@@ -31,7 +31,7 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
 
     return mean_dict
 
-def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name):
+def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name, metrics):
     # Single pass over the data for mean representation extraction
     model_dict = {
         "original": ori_model,
@@ -43,43 +43,55 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
     mean_retrain = mean_reps_dict["retrain"]
     mean_unlearn = mean_reps_dict["unlearn"]
 
-    visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
-
     # Compute shifts
     shift_retrain = mean_retrain - mean_ori
     shift_unlearn = mean_unlearn - mean_ori
-    
-    # Compute magnitude
-    mag_shift_retrain = torch.norm(shift_retrain, p=2).item()
-    mag_shift_unlearn = torch.norm(shift_unlearn, p=2).item()
-    
-    # Directional alignment
-    shift_cos_sim = F.cosine_similarity(shift_retrain.unsqueeze(0), shift_unlearn.unsqueeze(0)).item()
 
-    # Relative magnitude (closer to 1.0 is better)
-    mag_shift_ratio = mag_shift_unlearn / (mag_shift_retrain + 1e-9)
+    if "visualize" in metrics:
+        visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
+
+    cosine = dict()
+    mag_ratio = dict()
 
     # Breakdown metrics
-    retrain_cos_sim = F.cosine_similarity(mean_retrain.unsqueeze(0), mean_ori.unsqueeze(0)).item()
-    unlearn_cos_sim = F.cosine_similarity(mean_unlearn.unsqueeze(0), mean_ori.unsqueeze(0)).item()
-    mag_retrain = torch.norm(mean_retrain, p=2).item()
-    mag_unlearn = torch.norm(mean_unlearn, p=2).item()
-    mag_ori = torch.norm(mean_ori, p=2).item()
+    if "cosine" in metrics:
+        retrain_cos_sim = F.cosine_similarity(mean_retrain.unsqueeze(0), mean_ori.unsqueeze(0)).item()
+        unlearn_cos_sim = F.cosine_similarity(mean_unlearn.unsqueeze(0), mean_ori.unsqueeze(0)).item()
 
-    mag_retrain_ratio = mag_retrain / (mag_ori + 1e-9)
-    mag_unlearn_ratio = mag_unlearn / (mag_ori + 1e-9)
+        # Directional alignment
+        shift_cos_sim = F.cosine_similarity(shift_retrain.unsqueeze(0), shift_unlearn.unsqueeze(0)).item()
 
-    breakdown_metrics = {
-        "retrain_cos_sim": round(retrain_cos_sim, 4),
-        "unlearn_cos_sim": round(unlearn_cos_sim, 4),
-        "mag_retrain": round(mag_retrain, 4),
-        "mag_unlearn": round(mag_unlearn, 4),
-        "mag_ori": round(mag_ori, 4),
-        "mag_retrain_ratio": round(mag_retrain_ratio, 4),
-        "mag_unlearn_ratio": round(mag_unlearn_ratio, 4),
-        "mag_shift_retrain": round(mag_shift_retrain, 4),
-        "mag_shift_unlearn": round(mag_shift_unlearn, 4)
-    }
+        cosine = {
+            "retrain_cos_sim": round(retrain_cos_sim, 4),
+            "unlearn_cos_sim": round(unlearn_cos_sim, 4),
+            "shift_cos_sim": round(shift_cos_sim, 4)
+        }
+    
+    if "magnitude" in metrics:
+        mag_retrain = torch.norm(mean_retrain, p=2).item()
+        mag_unlearn = torch.norm(mean_unlearn, p=2).item()
+        mag_ori = torch.norm(mean_ori, p=2).item()
+
+        mag_retrain_ratio = mag_retrain / (mag_ori + 1e-9)
+        mag_unlearn_ratio = mag_unlearn / (mag_ori + 1e-9)
+
+        # Compute magnitude
+        mag_shift_retrain = torch.norm(shift_retrain, p=2).item()
+        mag_shift_unlearn = torch.norm(shift_unlearn, p=2).item()
+
+        # Relative magnitude (closer to 1.0 is better)
+        mag_shift_ratio = mag_shift_unlearn / (mag_shift_retrain + 1e-9)
+
+        mag_ratio = {
+            "mag_retrain": round(mag_retrain, 4),
+            "mag_unlearn": round(mag_unlearn, 4),
+            "mag_ori": round(mag_ori, 4),
+            "mag_retrain_ratio": round(mag_retrain_ratio, 4),
+            "mag_unlearn_ratio": round(mag_unlearn_ratio, 4),
+            "mag_shift_retrain": round(mag_shift_retrain, 4),
+            "mag_shift_unlearn": round(mag_shift_unlearn, 4),
+            "mag_shift_ratio": round(mag_shift_ratio, 4)
+        }
 
     mean_reps = {
         "mean_ori": mean_ori,
@@ -87,7 +99,12 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         "mean_unlearn": mean_unlearn
     }
 
-    return breakdown_metrics, round(shift_cos_sim, 4), round(mag_shift_ratio, 4), mean_reps
+    breakdown_metrics = {
+        "cosine_similarity": cosine,
+        "magnitude_ratio": mag_ratio
+    }
+
+    return breakdown_metrics, mean_reps
 
 def calculate_harmonic_mean(sim_retain, sim_unlearn):
     """

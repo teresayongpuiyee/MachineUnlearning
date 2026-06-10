@@ -27,6 +27,14 @@ parser.add_argument("-unlearned_model", type=str, required=True, help="Path to u
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
                     choices=["orthogonal", "parallel", ""])
+parser.add_argument("-metrics", type= str, nargs='+', 
+                    default= ["mia_logit", 
+                              "mia_rep", 
+                              "cka_o",
+                              "cka_r",
+                              "tsne"
+                              ], 
+                    help= "Metrics to evaluate")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -95,46 +103,17 @@ def main(args) -> None:
     utils.load_model_weights(model=unlearned_model, model_path=args.unlearned_model,device=device)
 
     cls_metrics_dict = dict()
+    rep_metrics_dict = dict()
+    cka_r_metrics_dict = dict()
+    cka_o_metrics_dict = dict()
 
     # Evaluation after unlearning
-    if len(args.project_method) == 0:
+    if "mia_logit" in args.metrics and len(args.project_method) == 0:
         # Classification-level evaluation
         train_enp, train_enp_labels = metrics.get_entropy(train_loader, unlearned_model)
         test_enp, test_enp_labels = metrics.get_entropy(test_loader, unlearned_model)
-        retain_enp, retain_enp_labels = metrics.get_entropy(retain_loader, unlearned_model)
-        forget_enp, _ = metrics.get_entropy(unlearn_loader, unlearned_model)
 
         logger.info(f"Logit MIA evaluation...")
-        ## Bad Teacher MIA
-        #badt_mia = metrics.badt_mia(
-        #    retain_loader=retain_loader,
-        #    forget_loader=unlearn_loader,
-        #    test_loader=test_loader,
-        #    model=unlearned_model)
-        #logger.info(f"Bad T MIA: {badt_mia}")
-
-        ## Bad Teacher equivalent MIA with balance and normalize features
-        #badt_mia_metrics, badt_mia_asr = repr_metrics.badt_rep_mia(
-        #    retain_reps=retain_enp,
-        #    forget_reps=forget_enp,
-        #    test_reps=test_enp,
-        #    retain_labels=retain_enp_labels,
-        #    test_labels=test_enp_labels,
-        #    unlearn_class=args.unlearn_class,
-        #    seed=args.seed
-        #)
-        #logger.info(f"Bad T MIA: {badt_mia_asr}")
-#
-        ## SCRUB equivalent MIA with balance and normalize features
-        #scrub_mia_metrics, scrub_mia_asr = repr_metrics.scrub_rep_mia(
-        #    forget_reps=forget_enp,
-        #    test_reps=test_enp,
-        #    test_labels=test_enp_labels,
-        #    unlearn_class=args.unlearn_class,
-        #    seed=args.seed
-        #)
-        #logger.info(f"SCRUB MIA: {scrub_mia_asr}")
-
         # POUR
         pour_mia_metrics, pour_mia_asr = repr_metrics.pour_rmia(
             train_reps=train_enp,
@@ -146,38 +125,15 @@ def main(args) -> None:
         )
         logger.info(f"POUR MIA: {pour_mia_asr}")
 
-        ## SURE
-        #sure_mia_metrics, sure_mia_asr = repr_metrics.sure_miars(
-        #    train_reps=train_enp,
-        #    test_reps=test_enp,
-        #    train_labels=train_enp_labels,
-        #    test_labels=test_enp_labels,
-        #    unlearn_class=args.unlearn_class,
-        #    seed=args.seed
-        #)
-        #logger.info(f"SURE MIA: {sure_mia_asr}")
-
         cls_metrics_dict = {
             # attack model metrics
-            #"badt_mia": badt_mia_metrics,
-            #"scrub_mia": scrub_mia_metrics,
             "pour_mia": pour_mia_metrics,
-            #"sure_mia": sure_mia_metrics,
-            
             # forget asr
-            #"badt_mia_asr": badt_mia_asr,
-            #"scrub_mia_asr": scrub_mia_asr,
             "pour_mia_asr": pour_mia_asr,
-            #"sure_mia_asr": sure_mia_asr,
         }
 
     # Representation-level evaluation
-    train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
-    test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
-    retain_reps, retain_labels = repr_metrics.get_representations(retain_loader, unlearned_model)
-    forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
-
-    if len(args.project_method) > 0:
+    if ("cka_o" in args.metrics or "cka_r" in args.metrics or "mia_rep" in args.metrics) and len(args.project_method) > 0:
         model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
         ori_model_path = model_dir + "/baseline.pt"
@@ -187,82 +143,37 @@ def main(args) -> None:
         retrain_model_path = model_dir + "/retrain.pt"
         retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
         utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
-
-        train_reps = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
-        test_train_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
-        #test_retain_reps = analyse.project_representations(test_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        #forget_retain_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_unlearn_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
-        #test_unlearn_reps = analyse.project_representations(test_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)       
-    else:
-        test_train_reps = test_reps
-        #test_retain_reps = test_reps
-        #forget_retain_reps = forget_reps       
-        forget_unlearn_reps = forget_reps
-        #test_unlearn_reps = test_reps
-
-
-    logger.info(f"Representation MIA evaluation...")
-    ## Bad Teacher equivalent Rep-MIA with balance and normalize features
-    #badt_rep_mia_metrics, badt_rep_mia_asr = repr_metrics.badt_rep_mia(
-    #    retain_reps=retain_reps,
-    #    forget_reps=forget_retain_reps,
-    #    test_reps=test_retain_reps,
-    #    retain_labels=retain_labels,
-    #    test_labels=test_labels,
-    #    unlearn_class=args.unlearn_class,
-    #    seed=args.seed
-    #)
-    #logger.info(f"Bad T rep-MIA: {badt_rep_mia_asr}")
-#
-    ## SCRUB equivalent Rep-MIA with balance and normalize features
-    #scrub_rep_mia_metrics, scrub_rep_mia_asr = repr_metrics.scrub_rep_mia(
-    #    forget_reps=forget_unlearn_reps,
-    #    test_reps=test_unlearn_reps,
-    #    test_labels=test_labels,
-    #    unlearn_class=args.unlearn_class,
-    #    seed=args.seed
-    #)
-    #logger.info(f"SCRUB rep-MIA: {scrub_rep_mia_asr}")
-
-    # POUR
-    pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
-        train_reps=train_reps,
-        test_reps=test_train_reps,
-        train_labels=train_labels,
-        test_labels=test_labels,
-        unlearn_class=args.unlearn_class,
-        seed=args.seed
-    )
-    logger.info(f"POUR rMIA: {pour_rmia_asr}")
-
-    ## SURE
-    #sure_miars_metrics, sure_miars_asr = repr_metrics.sure_miars(
-    #    train_reps=train_reps,
-    #    test_reps=test_train_reps,
-    #    train_labels=train_labels,
-    #    test_labels=test_labels,
-    #    unlearn_class=args.unlearn_class,
-    #    seed=args.seed
-    #)
-    #logger.info(f"SURE MIARS: {sure_miars_asr}")
-
-    rep_metrics_dict = {       
-        # attack model metrics
-        #"badt_rep_mia": badt_rep_mia_metrics,
-        #"scrub_rep_mia": scrub_rep_mia_metrics,
-        "pour_rmia": pour_rmia_metrics,
-        #"sure_miars": sure_miars_metrics,
-        
-        # forget asr
-        #"badt_rep_mia_asr": badt_rep_mia_asr,
-        #"scrub_rep_mia_asr": scrub_rep_mia_asr,
-        "pour_rmia_asr": pour_rmia_asr,
-        #"sure_miars_asr": sure_miars_asr,
-    }
     
-    if len(args.project_method) == 0 and num_classes <= 20:  # Only visualize when not projecting and number of classes is manageable
+    if "mia_rep" in args.metrics or "tsne" in args.metrics:
+        train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
+        test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
+        
+        if len(args.project_method) > 0:
+            train_reps = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+            test_reps = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
+
+    if "mia_rep" in args.metrics:
+        logger.info(f"Representation MIA evaluation...")
+
+        # POUR
+        pour_rmia_metrics, pour_rmia_asr = repr_metrics.pour_rmia(
+            train_reps=train_reps,
+            test_reps=test_reps,
+            train_labels=train_labels,
+            test_labels=test_labels,
+            unlearn_class=args.unlearn_class,
+            seed=args.seed
+        )
+        logger.info(f"POUR rMIA: {pour_rmia_asr}")
+
+        rep_metrics_dict = {       
+            # attack model metrics
+            "pour_rmia": pour_rmia_metrics,
+            # forget asr
+            "pour_rmia_asr": pour_rmia_asr,
+        }
+
+    if "tsne" in args.metrics and len(args.project_method) == 0 and num_classes <= 20:  # Only visualize when not projecting and number of classes is manageable
         repr_metrics.visualize_tsne(
             reps=train_reps,
             all_labels=train_labels,
@@ -273,62 +184,77 @@ def main(args) -> None:
         )
         logger.info("t-SNE visualization saved.")
 
-    logger.info(f"Representation similarity evaluation...")
-    # CKA
-    if len(args.project_method) == 0:
-        model_dir = "/".join(args.unlearned_model.split("/")[:-1])
-
-        ori_model_path = model_dir + "/baseline.pt"
-        ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-        utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
+    if "cka_o" in args.metrics or "cka_r" in args.metrics:
+        retain_reps, _ = repr_metrics.get_representations(retain_loader, unlearned_model)
+        forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
         
-        retrain_model_path = model_dir + "/retrain.pt"
-        retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-        utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
+        if len(args.project_method) > 0:
+            retain_reps = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+            forget_reps = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
 
-    retain_ori_reps, _ = repr_metrics.get_representations(retain_loader, ori_model)
-    forget_ori_reps, _ = repr_metrics.get_representations(unlearn_loader, ori_model)
-    retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, retrain_model)
-    forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, retrain_model)
+    if "cka_o" in args.metrics:
+        logger.info(f"Representation similarity evaluation with original model...")
+        
+        if len(args.project_method) == 0:
+            model_dir = "/".join(args.unlearned_model.split("/")[:-1])
+            ori_model_path = model_dir + "/baseline.pt"
+            ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+            utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
 
-    if len(args.project_method) > 0:
-        retain_ori_reps = analyse.project_representations(retain_ori_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_ori_reps = analyse.project_representations(forget_ori_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
-        retain_retrain_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
-        forget_retrain_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)        
-    
-    cka_f_o = repr_metrics.linear_cka(forget_unlearn_reps, forget_ori_reps)
-    cka_r_o = repr_metrics.linear_cka(retain_reps, retain_ori_reps)
-    logger.info(f"CKA between unlearned and original model: forget={cka_f_o}, retain={cka_r_o}")
+        retain_ori_reps, _ = repr_metrics.get_representations(retain_loader, ori_model)
+        forget_ori_reps, _ = repr_metrics.get_representations(unlearn_loader, ori_model)
+        
+        if len(args.project_method) > 0:
+            retain_ori_reps = analyse.project_representations(retain_ori_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+            forget_ori_reps = analyse.project_representations(forget_ori_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
+        
+        cka_f_o = repr_metrics.linear_cka(forget_reps, forget_ori_reps)
+        cka_r_o = repr_metrics.linear_cka(retain_reps, retain_ori_reps)
+        logger.info(f"CKA between unlearned and original model: forget={cka_f_o}, retain={cka_r_o}")
 
-    cka_f_r = repr_metrics.linear_cka(forget_unlearn_reps, forget_retrain_reps)
-    cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
-    logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
+        rus_o = repr_metrics.representation_unlearning_score(cka_f_o, cka_r_o, original=True)
+        logger.info(f"Representation Unlearning Score (RUS) with original model: {rus_o}")
 
-    cka_metrics_dict = {
-        "forget_unlearn_original": cka_f_o,
-        "retain_unlearn_original": cka_r_o,
-        "forget_unlearn_retrain": cka_f_r,
-        "retain_unlearn_retrain": cka_r_r,
-    }
+        cka_o_metrics_dict = {
+            "forget_unlearn_original": cka_f_o,
+            "retain_unlearn_original": cka_r_o,
+            "rus_unlearn_original": rus_o
+        }
 
-    # RUS
-    rus_o = repr_metrics.representation_unlearning_score(cka_f_o, cka_r_o, original=True)
-    logger.info(f"Representation Unlearning Score (RUS) with original model: {rus_o}")
-    
-    rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
-    logger.info(f"Representation Unlearning Score (RUS) with retrained model: {rus_r}")
+    if "cka_r" in args.metrics:
+        logger.info(f"Representation similarity evaluation with retrained model...")
+        if len(args.project_method) == 0:
+            model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
-    rus_metrics_dict = {
-        "unlearn_original": rus_o,
-        "unlearn_retrain": rus_r,
-    }
+            retrain_model_path = model_dir + "/retrain.pt"
+            retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+            utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
+
+        retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, retrain_model)
+        forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, retrain_model)
+
+        if len(args.project_method) > 0:
+            retain_retrain_reps = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
+            forget_retrain_reps = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)   
+
+        cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
+        cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
+        logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
+
+        rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
+        logger.info(f"Representation Unlearning Score (RUS) with retrained model: {rus_r}")
+
+        cka_r_metrics_dict = {
+            "forget_unlearn_retrain": cka_f_r,
+            "retain_unlearn_retrain": cka_r_r,
+            "rus_unlearn_retrain": rus_r
+        }
 
     metrics_dict = {
         "classification": cls_metrics_dict,
         "representation": rep_metrics_dict,
-        "cka": cka_metrics_dict,
-        "rus": rus_metrics_dict,
+        "cka_retrain": cka_r_metrics_dict,
+        "cka_original": cka_o_metrics_dict,
     }
 
     logger.info("Saving computed metrics...")

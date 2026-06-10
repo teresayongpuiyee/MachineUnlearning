@@ -24,6 +24,12 @@ parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selec
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, default=0, help= "Class to unlearn")
 parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
+parser.add_argument("-metrics", type= str, nargs='+', 
+                    default= ["cosine", 
+                              "magnitude",
+                              "visualize"
+                              ], 
+                    help= "Metrics to evaluate")
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
 # Set seed
@@ -97,7 +103,7 @@ def main(args) -> None:
     # cosine similarity
     logger.info("Computing representation shift alignment metrics...")
     logger.info("On training set...")
-    breakdown_train, cos_sim_train, mag_ratio_train, _ = analyse.compute_rep_shift_alignment(
+    breakdown_train, _ = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -105,11 +111,12 @@ def main(args) -> None:
         device, 
         unlearn_method, 
         output_path,
-        dataset_name="train"
+        dataset_name="train",
+        metrics=args.metrics
     )
 
     logger.info("On retain set...")
-    breakdown_retain, cos_sim_retain, mag_ratio_retain, mean_reps_retain = analyse.compute_rep_shift_alignment(
+    breakdown_retain, mean_reps_retain = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -117,11 +124,12 @@ def main(args) -> None:
         device, 
         unlearn_method, 
         output_path,
-        dataset_name="retain"
+        dataset_name="retain",
+        metrics=args.metrics
     )
 
     logger.info("On forget set...")
-    breakdown_unlearn, cos_sim_unlearn, mag_ratio_unlearn, mean_reps_unlearn = analyse.compute_rep_shift_alignment(
+    breakdown_unlearn, mean_reps_unlearn = analyse.compute_rep_shift_alignment(
         ori_model, 
         retrain_model, 
         unlearned_model, 
@@ -129,26 +137,25 @@ def main(args) -> None:
         device, 
         unlearn_method, 
         output_path,
-        dataset_name="unlearn"
+        dataset_name="unlearn",
+        metrics=args.metrics
     )
     
     logger.info("Calculating harmonic mean of cosine similarities between retain and unlearn sets...")
+    cos_sim_retain = breakdown_retain["cosine_similarity"]["shift_cos_sim"]
+    cos_sim_unlearn = breakdown_unlearn["cosine_similarity"]["shift_cos_sim"]
     cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
 
     logger.info("Computing forget-retain cosine similarities...")
     unlearn_ret_unl_cos_sim, retrain_ret_unl_cos_sim = analyse.compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn)
     
-    dir_align = {
-        "train": {"breakdown": breakdown_train, "cosine_similarity": cos_sim_train, "magnitude_ratio": mag_ratio_train},
-        "retain": {"breakdown": breakdown_retain, "cosine_similarity": cos_sim_retain, "magnitude_ratio": mag_ratio_retain},
-        "unlearn": {"breakdown": breakdown_unlearn, "cosine_similarity": cos_sim_unlearn, "magnitude_ratio": mag_ratio_unlearn},
+    metrics_dict = {
+        "train": breakdown_train,
+        "retain": breakdown_retain,
+        "unlearn": breakdown_unlearn,
         "harmonic_mean_retain_unlearn": cos_sim_h_mean,
         "unlearn_ret_unl_cos_sim": unlearn_ret_unl_cos_sim,
         "retrain_ret_unl_cos_sim": retrain_ret_unl_cos_sim
-    }
-    
-    metrics_dict = {
-        "Directional Alignment": dir_align,
     }
 
     logger.info("Saving computed metrics...")
