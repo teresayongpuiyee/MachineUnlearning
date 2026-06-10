@@ -6,6 +6,7 @@ from unlearn_strategies import unlearn
 from torch.utils.data import DataLoader
 import yaml
 import copy
+import re
 
 parser = argparse.ArgumentParser()
 # Device
@@ -77,7 +78,7 @@ def main(args) -> None:
 
     unlearned_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     
-    if unlearn_method == "pour_p":
+    if re.sub(r"\d", "", unlearn_method) == "pour_p":
         unlearned_model = unlearn.POUR_P(
             copy.deepcopy(unlearned_model), 
             args.unlearn_class
