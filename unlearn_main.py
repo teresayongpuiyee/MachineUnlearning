@@ -25,6 +25,7 @@ parser.add_argument("-model_root", type= str, default= "checkpoint", help= "Data
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_true", default=False, help="Use pretrained timm model")
 parser.add_argument("-save_model", dest="save_model", action="store_true", default= False, help= "Save trained model option")
+parser.add_argument("-model_name", type= str, default= "", help= "Save model name")
 parser.add_argument("-retrain_pretrained_weight", type= str, default= "", help= "Pretrained model path")
 
 # Unlearn configuration
@@ -81,10 +82,12 @@ def main(args) -> None:
 
     utils.create_directory_if_not_exists(output_path)
 
-    logger = utils.configure_logger(f"{output_path}unlearn_{args.unlearn_method}.log")
+    model_name = args.model_name if args.model_name else args.unlearn_method
 
-    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{args.unlearn_method}_config.yaml"
-    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{args.unlearn_method}_metrics.yaml"
+    logger = utils.configure_logger(f"{output_path}unlearn_{model_name}.log")
+
+    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{model_name}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{model_name}_metrics.yaml"
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
         yaml.dump(config_dict, f, default_flow_style=False)
 
@@ -210,7 +213,7 @@ def main(args) -> None:
     if args.save_model:
         utils.save_model(
             checkpoint=unlearned_model.state_dict(),
-            model_name=args.unlearn_method,
+            model_name=model_name,
             model_root=args.model_root,
         )
 

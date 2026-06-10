@@ -31,6 +31,7 @@ parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selec
 parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_true", default=False, help="Use pretrained timm model")
 parser.add_argument("-pretrained_weight", type= str, default= "", help= "Pretrained model path")
 parser.add_argument("-resume", dest="resume", action="store_true", default=False, help="Resume training from checkpoint")
+parser.add_argument("-model_name", type= str, default= "baseline", help= "Save model name")
 
 # Training hyperparameter
 parser.add_argument("-epochs", type= int, default= 30, help= "Training epochs")
@@ -255,7 +256,7 @@ if __name__ == "__main__":
             model, 
             optimizer, 
             lr_scheduler,
-            f"{args.model_root}/baseline.pt",
+            f"{args.model_root}/{args.model_name}.pt",
             device
         )
     else:
@@ -336,7 +337,7 @@ if __name__ == "__main__":
                     'best_val_loss': best_test_loss,
                     'patience_counter': patience_counter
                 },
-                model_name="baseline",
+                model_name=args.model_name,
                 model_root=args.model_root,
             )
 
