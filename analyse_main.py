@@ -21,6 +21,7 @@ parser.add_argument("-num_workers", type= int, default= 2, help= "Number of work
 parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_true", default=False, help="Model trained with pretrained timm")
 # Model
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
+parser.add_argument("-retrain_model_name", type= str, default= "retrain", help= "Retrain model name")
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, default=0, help= "Class to unlearn")
 parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
@@ -45,7 +46,7 @@ def main(args) -> None:
     
     model_path = "/".join(unlearned_model_path_list[:-1])
     ori_model_path = f"{model_path}/baseline.pt"
-    retrain_model_path = f"{model_path}/retrain.pt"
+    retrain_model_path = f"{model_path}/{args.retrain_model_name}.pt"
 
     output_path = f"./{exp_name}/{args.unlearn_class}/analyse_outputs/"
     utils.create_directory_if_not_exists(output_path)

@@ -23,6 +23,7 @@ parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_tr
 # Model
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
+parser.add_argument("-retrain_model_name", type= str, default= "retrain", help= "Retrain model name")
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
@@ -140,7 +141,7 @@ def main(args) -> None:
         ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
         utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
         
-        retrain_model_path = model_dir + "/retrain.pt"
+        retrain_model_path = model_dir + f"/{args.retrain_model_name}.pt"
         retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
         utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
     
@@ -226,7 +227,7 @@ def main(args) -> None:
         if len(args.project_method) == 0:
             model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
-            retrain_model_path = model_dir + "/retrain.pt"
+            retrain_model_path = model_dir + f"/{args.retrain_model_name}.pt"
             retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
             utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
 
