@@ -52,9 +52,9 @@ def main(args) -> None:
     output_path = f"./{exp_name}/{args.unlearn_class}/analyse_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
-    logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}.log")
-    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_config.yaml"
-    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_metrics.yaml"
+    logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}.log")
+    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}_metrics.yaml"
 
     config_dict = vars(args).copy()
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
@@ -112,6 +112,7 @@ def main(args) -> None:
         train_loader, 
         device, 
         unlearn_method, 
+        args.retrain_model_name,
         output_path,
         dataset_name="train",
         metrics=args.metrics
@@ -125,6 +126,7 @@ def main(args) -> None:
         retain_loader, 
         device, 
         unlearn_method, 
+        args.retrain_model_name,
         output_path,
         dataset_name="retain",
         metrics=args.metrics
@@ -138,6 +140,7 @@ def main(args) -> None:
         unlearn_loader, 
         device, 
         unlearn_method, 
+        args.retrain_model_name,
         output_path,
         dataset_name="unlearn",
         metrics=args.metrics

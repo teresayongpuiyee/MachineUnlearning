@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn.functional as F
 from tqdm import tqdm
@@ -31,7 +32,7 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
 
     return mean_dict
 
-def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, output_path, dataset_name, metrics):
+def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, retrain_model_name, output_path, dataset_name, metrics):
     # Single pass over the data for mean representation extraction
     model_dict = {
         "original": ori_model,
@@ -48,7 +49,7 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
     shift_unlearn = mean_unlearn - mean_ori
 
     if "visualize" in metrics:
-        visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=unlearn_method, output_path=output_path, dataset_name=dataset_name)
+        visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, unlearn_method=f"{unlearn_method}_{retrain_model_name}", output_path=output_path, dataset_name=dataset_name)
 
     cosine = dict()
     mag_ratio = dict()
@@ -154,7 +155,7 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
         mean_retrain: Tensor, mean representation from retrain model (D,)
         mean_unlearn: Tensor, mean representation from unlearned model (D,)
         labels: Optional list of strings for labeling points (default: ["Original", "Retrain", "Unlearned"])
-        title: Plot title
+        unlearn_method: Unlearning method name for title purposes
         output_path: Optional file path to save the plot (e.g., "rep_shift.png")
         dataset_name: Name of the dataset for title purposes
     """
@@ -194,7 +195,9 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
     
     # Save if path provided
     if output_path is not None:
-        save_path = f"{output_path}rep_shift_{unlearn_method}_{dataset_name}.png"
+        output_path = output_path + f"visualize"
+        os.makedirs(output_path, exist_ok=True)
+        save_path = f"{output_path}/rep_shift_{unlearn_method}_{dataset_name}.png"
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
         print(f"Plot saved to {save_path}")
 
