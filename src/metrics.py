@@ -35,7 +35,7 @@ def validation_epoch_end(model, outputs):
     epoch_loss = torch.stack(batch_losses).mean()  # Combine losses
     batch_accs = [x["Acc"] for x in outputs]
     epoch_acc = torch.stack(batch_accs).mean()  # Combine accuracies
-    return {"Loss": round(epoch_loss.item(), 4), "Acc": round(epoch_acc.item(), 4)}
+    return {"Loss": epoch_loss.item(), "Acc": epoch_acc.item()}
 
 
 @torch.no_grad()

@@ -513,8 +513,8 @@ def linear_probing(
     forget_acc = eval_accuracy(unlearn_eval_loader)
 
     return {
-        "retain_accuracy": round(retain_acc, 4),
-        "forget_accuracy": round(forget_acc, 4)
+        "retain_accuracy": retain_acc,
+        "forget_accuracy": forget_acc
     }
 
 def binary_forget_probe(
