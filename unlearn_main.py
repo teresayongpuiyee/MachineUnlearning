@@ -93,6 +93,7 @@ def main(args) -> None:
 
     args.model_root = "/".join([".", exp_name, f"{args.unlearn_class}", args.model_root])
     # Set seed
+    print(f"Using seed: {args.seed}")
     utils.set_seed(seed=args.seed)
 
     # Device
