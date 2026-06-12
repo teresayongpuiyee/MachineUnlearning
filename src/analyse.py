@@ -63,9 +63,9 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         shift_cos_sim = F.cosine_similarity(shift_retrain.unsqueeze(0), shift_unlearn.unsqueeze(0)).item()
 
         cosine = {
-            "retrain_cos_sim": round(retrain_cos_sim, 4),
-            "unlearn_cos_sim": round(unlearn_cos_sim, 4),
-            "shift_cos_sim": round(shift_cos_sim, 4)
+            "retrain_cos_sim": retrain_cos_sim,
+            "unlearn_cos_sim": unlearn_cos_sim,
+            "shift_cos_sim": shift_cos_sim
         }
     
     if "magnitude" in metrics:
@@ -84,14 +84,14 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         mag_shift_ratio = mag_shift_unlearn / (mag_shift_retrain + 1e-9)
 
         mag_ratio = {
-            "mag_retrain": round(mag_retrain, 4),
-            "mag_unlearn": round(mag_unlearn, 4),
-            "mag_ori": round(mag_ori, 4),
-            "mag_retrain_ratio": round(mag_retrain_ratio, 4),
-            "mag_unlearn_ratio": round(mag_unlearn_ratio, 4),
-            "mag_shift_retrain": round(mag_shift_retrain, 4),
-            "mag_shift_unlearn": round(mag_shift_unlearn, 4),
-            "mag_shift_ratio": round(mag_shift_ratio, 4)
+            "mag_retrain": mag_retrain,
+            "mag_unlearn": mag_unlearn,
+            "mag_ori": mag_ori,
+            "mag_retrain_ratio": mag_retrain_ratio,
+            "mag_unlearn_ratio": mag_unlearn_ratio,
+            "mag_shift_retrain": mag_shift_retrain,
+            "mag_shift_unlearn": mag_shift_unlearn,
+            "mag_shift_ratio": mag_shift_ratio
         }
 
     mean_reps = {
@@ -123,7 +123,7 @@ def calculate_harmonic_mean(sim_retain, sim_unlearn):
     
     # Standard harmonic mean formula
     h_mean = (2 * a * b) / (a + b)
-    return round(h_mean, 4)
+    return h_mean
 
 def compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn):
     mean_ori_retain = mean_reps_retain["mean_ori"]
@@ -143,7 +143,7 @@ def compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn)
     unlearn_ret_unl_cos_sim = F.cosine_similarity(unlearn_retain_shift.unsqueeze(0), unlearn_unlearn_shift.unsqueeze(0)).item()
     retrain_ret_unl_cos_sim = F.cosine_similarity(retrain_retain_shift.unsqueeze(0), retrain_unlearn_shift.unsqueeze(0)).item()
 
-    return round(unlearn_ret_unl_cos_sim,4), round(retrain_ret_unl_cos_sim,4)
+    return unlearn_ret_unl_cos_sim, retrain_ret_unl_cos_sim
 
 def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None, 
                          unlearn_method="", output_path=None, dataset_name=""):

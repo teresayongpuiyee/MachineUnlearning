@@ -323,16 +323,16 @@ def pour_rmia(
             results["forget_fpr"].append(forget_nonmember_preds.mean())
 
     metrics_dict = {
-        "train_acc": round(float(np.mean(results["train_acc"])* 100), 4),
-        "train_f1": round(float(np.mean(results["train_f1"])* 100), 4),
-        "test_acc": round(float(np.mean(results["test_acc"])* 100), 4),
-        "test_f1": round(float(np.mean(results["test_f1"])* 100), 4),
-        "forget_fpr": round(float(np.mean(results["forget_fpr"])* 100), 4),
+        "train_acc": float(np.mean(results["train_acc"])* 100),
+        "train_f1": float(np.mean(results["train_f1"])* 100),
+        "test_acc": float(np.mean(results["test_acc"])* 100),
+        "test_f1": float(np.mean(results["test_f1"])* 100),
+        "forget_fpr": float(np.mean(results["forget_fpr"])* 100),
     }
 
     forget_asr =None
     if results["forget_asr"]:
-        forget_asr = round(float(np.mean(results["forget_asr"]) * 100), 4)
+        forget_asr = float(np.mean(results["forget_asr"]) * 100)
 
     return metrics_dict, forget_asr
 
@@ -695,7 +695,7 @@ def linear_cka(X, Y, eps=1e-8):
 
     cka = numerator / (denom + eps)
 
-    return round(cka.item(), 4)
+    return cka.item()
 
 def representation_unlearning_score(cka_f, cka_r, original=False):
     # Compute harmonic mean between cka_f and cka_r
@@ -704,4 +704,4 @@ def representation_unlearning_score(cka_f, cka_r, original=False):
         cka_f = 1 - cka_f
 
     rus = 2 * cka_f * cka_r / (cka_f + cka_r + 1e-8)
-    return round(rus, 4)
+    return rus
