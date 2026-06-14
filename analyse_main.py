@@ -146,10 +146,12 @@ def main(args) -> None:
         metrics=args.metrics
     )
     
-    logger.info("Calculating harmonic mean of cosine similarities between retain and unlearn sets...")
-    cos_sim_retain = breakdown_retain["cosine_similarity"]["shift_cos_sim"]
-    cos_sim_unlearn = breakdown_unlearn["cosine_similarity"]["shift_cos_sim"]
-    cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
+    cos_sim_h_mean = None
+    if "cosine" in args.metrics:
+        logger.info("Calculating harmonic mean of cosine similarities between retain and unlearn sets...")
+        cos_sim_retain = breakdown_retain["cosine_similarity"]["shift_cos_sim"]
+        cos_sim_unlearn = breakdown_unlearn["cosine_similarity"]["shift_cos_sim"]
+        cos_sim_h_mean = analyse.calculate_harmonic_mean(cos_sim_retain, cos_sim_unlearn)
 
     logger.info("Computing forget-retain cosine similarities...")
     unlearn_ret_unl_cos_sim, retrain_ret_unl_cos_sim = analyse.compute_forget_retain_cosine_similarity(mean_reps_retain, mean_reps_unlearn)
