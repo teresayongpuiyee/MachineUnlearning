@@ -164,7 +164,6 @@ def main(args) -> None:
             train_labels=train_labels,
             test_labels=test_labels,
             unlearn_class=args.unlearn_class,
-            seed=args.seed
         )
         logger.info(f"POUR rMIA: {pour_rmia_asr}")
 
@@ -182,7 +181,6 @@ def main(args) -> None:
             unlearn_method=unlearn_method,
             save_path=output_path, 
             tag="rep",
-            seed=args.seed
         )
         logger.info("t-SNE visualization saved.")
 
