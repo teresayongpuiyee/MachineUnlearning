@@ -231,10 +231,10 @@ def project_representations(
     if "orthogonal" in projection:
         # Project representations orthogonally to the shift direction
         orthogonal = representations - parallel  # (N, D)
-        return orthogonal
+        return orthogonal, shift_retrain_norm
     elif "parallel" in projection:
         # Project representations parallel to the shift direction
-        return parallel
+        return parallel, shift_retrain_norm
     else:
         # Return original representations if neither orthogonal nor parallel projection is requested
-        return representations
+        return representations, shift_retrain_norm
