@@ -108,6 +108,7 @@ def main(args) -> None:
     rep_metrics_dict = dict()
     cka_r_metrics_dict = dict()
     cka_o_metrics_dict = dict()
+    shift_norm_dict = dict()
 
     # Evaluation after unlearning
     if "mia_logit" in args.metrics and len(args.project_method) == 0:
@@ -154,6 +155,10 @@ def main(args) -> None:
             train_reps, train_shift_norm = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
             test_reps, _ = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
 
+            shift_norm_dict.update({
+                "train": train_shift_norm
+            })
+
     if "mia_rep" in args.metrics:
         logger.info(f"Representation MIA evaluation...")
 
@@ -172,7 +177,6 @@ def main(args) -> None:
             "pour_rmia": pour_rmia_metrics,
             # forget asr
             "pour_rmia_asr": pour_rmia_asr,
-            "train_shift_norm": train_shift_norm,
         }
 
     if "tsne" in args.metrics and len(args.project_method) == 0 and num_classes <= 20:  # Only visualize when not projecting and number of classes is manageable
@@ -192,6 +196,11 @@ def main(args) -> None:
         if len(args.project_method) > 0:
             retain_reps, retain_shift_norm = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
             forget_reps, forget_shift_norm = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
+
+            shift_norm_dict.update({
+                "retain": retain_shift_norm,
+                "forget": forget_shift_norm
+            })
 
     if "cka_o" in args.metrics:
         logger.info(f"Representation similarity evaluation with original model...")
@@ -220,8 +229,6 @@ def main(args) -> None:
             "forget_unlearn_original": cka_f_o,
             "retain_unlearn_original": cka_r_o,
             "rus_unlearn_original": rus_o,
-            "retain_shift_norm": retain_shift_norm,
-            "forget_shift_norm": forget_shift_norm,
         }
 
     if "cka_r" in args.metrics:
@@ -251,8 +258,6 @@ def main(args) -> None:
             "forget_unlearn_retrain": cka_f_r,
             "retain_unlearn_retrain": cka_r_r,
             "rus_unlearn_retrain": rus_r,
-            "retain_shift_norm": retain_shift_norm,
-            "forget_shift_norm": forget_shift_norm,
         }
 
     metrics_dict = {
@@ -260,6 +265,7 @@ def main(args) -> None:
         "representation": rep_metrics_dict,
         "cka_retrain": cka_r_metrics_dict,
         "cka_original": cka_o_metrics_dict,
+        "shift_norm": shift_norm_dict,
     }
 
     logger.info("Saving computed metrics...")
