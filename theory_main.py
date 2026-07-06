@@ -188,6 +188,23 @@ def main(args) -> None:
     logger.info(f"uncentered shift sq mass: {u_curves['shift squared mass'].squeeze(-1).tolist()}")
     logger.info(f"uncentered random sq mass: {u_curves['random squared mass'].squeeze(-1).tolist()}")
 
+    c_mm = theory.diagnose_concentration(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
+    u_mm = theory.diagnose_concentration(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
+
+    mass_mean, var_cum = theory.diagnose_by_variance(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
+    mass_mean, var_cum = theory.diagnose_by_variance(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
+
+    c_eval = B["centered"]["eigvals"]
+    cv_fig, ax = theory.plot_concentration_by_variance(dhs, c_eval, c_evec)
+    cv_fig.savefig(f"{output_path}centered_concentration_variance_curve.png", dpi=150)
+
+    u_eval = B["uncentered"]["eigvals"]
+    uv_fig, ax = theory.plot_concentration_by_variance(dhs, u_eval, u_evec)
+    uv_fig.savefig(f"{output_path}uncentered_concentration_variance_curve.png", dpi=150)
+
+    align = theory.resolve_concentration(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
+    align = theory.resolve_concentration(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
+
     metrics_dict = {
 
     }
