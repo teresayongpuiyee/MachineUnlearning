@@ -84,17 +84,18 @@ def main(args) -> None:
 
     # spectra agree off the top: compare from rank 1 onward
     c, u = B["centered"]["eigvals"], B["uncentered"]["eigvals"]
-    logger.info("top eigval  centered/uncentered:", c[0].item(), u[0].item())
-    logger.info("tail rel-diff (rank>=1):",
-        (c[1:] - u[1:]).abs().div(u[1:].clamp_min(1e-12)).max().item())
+    logger.info(f"top eigval  centered/uncentered: {c[0].item()} {u[0].item()}")
+    logger.info(
+        f"tail rel-diff (rank>=1): "
+        f"{(c[1:] - u[1:]).abs().div(u[1:].clamp_min(1e-12)).max().item()}")
 
     # the mean should load almost entirely on the uncentered top eigenvector
     v1_u = B["uncentered"]["eigvecs"][:, 0]
     mean_hat = B["mean"] / B["mean"].norm()
-    logger.info("cos(h_bar, v1_uncentered):", torch.dot(mean_hat, v1_u).abs().item())
+    logger.info(f"cos(h_bar, v1_uncentered): {torch.dot(mean_hat, v1_u).abs().item()}")
 
-    logger.info("centered   dust rel_neg:", B["centered"]["neg_diag"]["rel_neg"])
-    logger.info("uncentered dust rel_neg:", B["uncentered"]["neg_diag"]["rel_neg"])
+    logger.info(f"centered   dust rel_neg: {B['centered']['neg_diag']['rel_neg']}")
+    logger.info(f"uncentered dust rel_neg: {B['uncentered']['neg_diag']['rel_neg']}")
 
     logger.info("Loading retrained model checkpoints...")
     retrain0_model_path = f"{args.model_dir}/retrain0.pt"
