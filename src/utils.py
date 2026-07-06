@@ -122,9 +122,12 @@ def configure_logger(log_file):
 
     # Configure the basic settings
     logging.basicConfig(
-        filename=LOG_FILENAME,  # Specify the output file
         level=logging.INFO,     # Set the minimum severity level to log (e.g., DEBUG, INFO, WARNING, ERROR, CRITICAL)
-        format='%(asctime)s - %(levelname)s - %(module)s - %(message)s' # Define the log message format
+        format='%(asctime)s - %(levelname)s - %(module)s - %(message)s', # Define the log message format
+        handlers=[
+            logging.FileHandler(LOG_FILENAME),  # Write logs to the output file
+            logging.StreamHandler()             # Also print logs to the console (stderr)
+        ]
         # Example format options:
         # %(asctime)s: Timestamp
         # %(levelname)s: Severity level (e.g., INFO, ERROR)
