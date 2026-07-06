@@ -193,10 +193,32 @@ def load_model_weights(
     model: torch.nn.Module,
     model_path: str,
     device: torch.device,
+    strict: bool = True,
 ) -> None:
     checkpoint = torch.load(model_path, map_location=device)
 
     if 'model_state_dict' in checkpoint:
-        model.load_state_dict(checkpoint['model_state_dict'])
+        state_dict = checkpoint['model_state_dict']
     else:
-        model.load_state_dict(checkpoint)
+        state_dict = checkpoint
+
+    if strict:
+        model.load_state_dict(state_dict)
+        return
+
+    # Drop checkpoint entries whose shapes don't match the current model
+    # (e.g. a classifier head trained on a different number of classes),
+    # keeping the current model's parameters for those.
+    model_state = model.state_dict()
+    filtered_state_dict = {}
+    skipped = []
+    for key, value in state_dict.items():
+        if key in model_state and model_state[key].shape == value.shape:
+            filtered_state_dict[key] = value
+        else:
+            skipped.append(key)
+
+    if skipped:
+        print(f"[load_model_weights] Skipping mismatched keys: {skipped}")
+
+    model.load_state_dict(filtered_state_dict, strict=False)

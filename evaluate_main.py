@@ -102,7 +102,7 @@ def main(args) -> None:
 
     # Model preparation
     logger.info("Loading model checkpoints...")
-    utils.load_model_weights(model=unlearned_model, model_path=args.unlearned_model,device=device)
+    utils.load_model_weights(model=unlearned_model, model_path=args.unlearned_model,device=device, strict=False)
 
     cls_metrics_dict = dict()
     rep_metrics_dict = dict()
