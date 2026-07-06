@@ -63,7 +63,7 @@ def concentration_curves(dhs, eigvecs, n_random: int = 1, seed: int = 0):
     """
     if isinstance(dhs, (list, tuple)):
         dhs = torch.stack([torch.as_tensor(x) for x in dhs], dim=0)
-    dhs = dhs.to(eigvecs.dtype)                 # match the float64 basis
+    dhs = dhs.to(device=eigvecs.device, dtype=eigvecs.dtype)   # match basis device+dtype
     K, d = dhs.shape
 
     # project every shift onto every eigenvector at once:
@@ -75,7 +75,7 @@ def concentration_curves(dhs, eigvecs, n_random: int = 1, seed: int = 0):
 
     # random unit-vector baseline(s) in the same d-dim space
     g = torch.Generator().manual_seed(seed)
-    R = torch.randn(n_random, d, generator=g, dtype=eigvecs.dtype)
+    R = torch.randn(n_random, d, generator=g, dtype=eigvecs.dtype).to(eigvecs.device)
     R = R / R.norm(dim=1, keepdim=True)
     rcum = (R @ eigvecs).pow(2).cumsum(dim=1)
     rand_sq_mass = rcum[:, -1:].clone()
