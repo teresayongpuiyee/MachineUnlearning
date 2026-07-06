@@ -176,11 +176,17 @@ def main(args) -> None:
     logger.info(f"centered shift  low-variance-half mass: {c_tail_frac.mean():.3f} ± {c_tail_frac.std():.3f}")
     logger.info(f"centered random low-variance-half mass: {c_rand_tail.mean():.3f}")
 
+    logger.info(f"centered shift sq mass: {c_curves['shift squared mass'].squeeze(-1).tolist()}")
+    logger.info(f"centered random sq mass: {c_curves['random squared mass'].squeeze(-1).tolist()}")
+
     u_d = u_evec.shape[0]
     u_tail_frac = 1.0 - u_curves["shift"][:, u_d // 2 - 1]      # mass beyond the top u_d/2 directions
     u_rand_tail = 1.0 - u_curves["random"][:, u_d // 2 - 1]
     logger.info(f"uncentered shift  low-variance-half mass: {u_tail_frac.mean():.3f} ± {u_tail_frac.std():.3f}")
     logger.info(f"uncentered random low-variance-half mass: {u_rand_tail.mean():.3f}")
+
+    logger.info(f"uncentered shift sq mass: {u_curves['shift squared mass'].squeeze(-1).tolist()}")
+    logger.info(f"uncentered random sq mass: {u_curves['random squared mass'].squeeze(-1).tolist()}")
 
     metrics_dict = {
 

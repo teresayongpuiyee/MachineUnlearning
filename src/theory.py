@@ -70,6 +70,7 @@ def concentration_curves(dhs, eigvecs, n_random: int = 1, seed: int = 0):
     # coeff[k, r] = <dh_k, v_r>, since eigvecs[:, r] = v_r
     coeffs = dhs @ eigvecs                        # (K, d) @ (d, d) -> (K, d)
     cum = coeffs.pow(2).cumsum(dim=1)             # cumulative squared mass along rank
+    shift_sq_mass = cum[:, -1:].clone()
     cum = cum / cum[:, -1:].clamp_min(1e-30)      # ||dh||^2-normalize -> ends at 1.0
 
     # random unit-vector baseline(s) in the same d-dim space
@@ -77,9 +78,10 @@ def concentration_curves(dhs, eigvecs, n_random: int = 1, seed: int = 0):
     R = torch.randn(n_random, d, generator=g, dtype=eigvecs.dtype)
     R = R / R.norm(dim=1, keepdim=True)
     rcum = (R @ eigvecs).pow(2).cumsum(dim=1)
+    rand_sq_mass = rcum[:, -1:].clone()
     rcum = rcum / rcum[:, -1:].clamp_min(1e-30)
 
-    return {"shift": cum, "random": rcum}         # (K, d) and (n_random, d)
+    return {"shift": cum, "random": rcum, "shift squared mass": shift_sq_mass, "random squared mass": rand_sq_mass}         # (K, d) and (n_random, d)
 
 
 def plot_concentration(curves, title="Shift-mass concentration vs. eigenvalue rank"):
