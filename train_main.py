@@ -150,8 +150,8 @@ if __name__ == "__main__":
         dataset_name= args.dataset, root= args.root, model=model, pretrained_timm= args.pretrained_timm
     )
 
-    g = torch.Generator()
-    g.manual_seed(args.seed)
+    #g = torch.Generator()
+    #g.manual_seed(args.seed)
 
     train_loader = DataLoader(
         train_dataset, 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
         pin_memory=True,
         persistent_workers=True,
         worker_init_fn=utils.seed_worker,
-        generator=g
+        #generator=g
     )
     test_loader = DataLoader(
         test_dataset, 

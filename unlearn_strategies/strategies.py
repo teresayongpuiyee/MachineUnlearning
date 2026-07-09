@@ -279,10 +279,10 @@ def amnesiac(
     for x, y in retain_loader.dataset:
         unlearning_trainset.append((x, y))
 
-    unlearning_train_g = torch.Generator()
-    unlearning_train_g.manual_seed(args.seed)
+    #unlearning_train_g = torch.Generator()
+    #unlearning_train_g.manual_seed(args.seed)
     unlearning_train_set_dl = DataLoader(
-        unlearning_trainset, 64, pin_memory=True, shuffle=True, num_workers=unlearn_loader.num_workers, persistent_workers=True, generator=unlearning_train_g
+        unlearning_trainset, 64, pin_memory=True, shuffle=True, num_workers=unlearn_loader.num_workers, persistent_workers=True, #generator=unlearning_train_g
     )
 
     unlearned_model = utils.training_optimization(
@@ -715,10 +715,10 @@ def unsir(
             )
         )
 
-    healer_g = torch.Generator()
-    healer_g.manual_seed(args.seed)
+    #healer_g = torch.Generator()
+    #healer_g.manual_seed(args.seed)
     heal_loader = torch.utils.data.DataLoader(
-        other_samples, batch_size=256, shuffle=True, num_workers=retain_loader.num_workers, pin_memory=True, persistent_workers=True, generator=healer_g
+        other_samples, batch_size=256, shuffle=True, num_workers=retain_loader.num_workers, pin_memory=True, persistent_workers=True, #generator=healer_g
     )
     model = utils.training_optimization(
         logger,

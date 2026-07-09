@@ -90,10 +90,10 @@ def blindspot_unlearner(
 ):
     # creating the unlearning dataset.
     unlearning_data = dataset.UnLearningData(forget_data=forget_data, retain_data=retain_data)
-    unlearning_g = torch.Generator()
-    unlearning_g.manual_seed(seed)
+    #unlearning_g = torch.Generator()
+    #unlearning_g.manual_seed(seed)
     unlearning_loader = DataLoader(
-        unlearning_data, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers, persistent_workers=True, generator=unlearning_g
+        unlearning_data, batch_size=batch_size, shuffle=True, pin_memory=True, num_workers=num_workers, persistent_workers=True, #generator=unlearning_g
     )
 
     unlearning_teacher.eval()
@@ -180,9 +180,9 @@ def UNSIR_create_noisy_loader(
         )
     noisy_data += other_samples
 
-    noisy_g = torch.Generator()
-    noisy_g.manual_seed(seed)
-    noisy_loader = DataLoader(noisy_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True, generator=noisy_g)
+    #noisy_g = torch.Generator()
+    #noisy_g.manual_seed(seed)
+    noisy_loader = DataLoader(noisy_data, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True, persistent_workers=True, )#generator=noisy_g)
 
     return noisy_loader
 
