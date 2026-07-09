@@ -97,6 +97,21 @@ def main(args) -> None:
     logger.info(f"centered   dust rel_neg: {B['centered']['neg_diag']['rel_neg']}")
     logger.info(f"uncentered dust rel_neg: {B['uncentered']['neg_diag']['rel_neg']}")
 
+    # 1. WHERE is the mismatch? (predict: rank 1-3, decaying toward the deep tail)
+    reldiff = (c[1:] - u[1:]).abs() / u[1:].clamp_min(1e-12)
+    k = int(reldiff.argmax()) + 1
+    print(f"max tail rel-diff {reldiff.max():.3f} at rank {k}")
+    for r in range(12):
+        print(f"  rank {r:>2}: c {c[r]:8.4f}  u {u[r]:8.4f}  rel {(abs(c[r]-u[r])/max(u[r].item(),1e-12)):.4f}")
+
+    # 2. interlacing test: does c[k] match u[k+1]? (shift-by-one)
+    shift1 = (c[:-1] - u[1:]).abs() / u[1:].clamp_min(1e-12)
+    print("max rel-diff  c[k] vs u[k+1] (shift-by-one):", shift1.max().item())
+
+    # 3. mean magnitude consistency: ||h_bar||^2 should equal trace(M) - trace(C)
+    print("||h_bar||^2       =", B["mean"].pow(2).sum().item())
+    print("trace(M)-trace(C) =", (u.sum() - c.sum()).item())
+
     logger.info("Loading retrained model checkpoints...")
     retrain0_model_path = f"{args.model_dir}/retrain0.pt"
     retrain1_model_path = f"{args.model_dir}/retrain1.pt"
@@ -156,6 +171,7 @@ def main(args) -> None:
         dhs.append(shift_retrain)
 
     logger.info("Computing concentration curves...")
+    """
     # dhs: (10, 512) forget-set mean-shift vectors; B from concentration_basis(H_r)
     c_evec = B["centered"]["eigvecs"]                   # (512, 512), columns, descending
     c_curves = theory.concentration_curves(dhs, c_evec, n_random=1, seed=0)
@@ -204,6 +220,13 @@ def main(args) -> None:
 
     align = theory.resolve_concentration(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
     align = theory.resolve_concentration(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
+
+    contrib = theory.settle_it(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
+    contrib = theory.settle_it(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
+    """
+
+    c_all_rows = theory.full_concentration_report(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"], f"{output_path}centered")
+    u_all_rows = theory.full_concentration_report(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"], f"{output_path}uncentered")
 
     metrics_dict = {
 

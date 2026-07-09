@@ -251,3 +251,131 @@ def resolve_concentration(dhs, eigvals, eigvecs):
     print(f"\nvariance-alignment ratio: {align:.3f}  "
           f"(<1 low-var, =1 random, >1 high-var)")
     return align.item()
+
+
+@torch.no_grad()
+def settle_it(dhs, eigvals, eigvecs):
+    if isinstance(dhs, (list, tuple)):
+        dhs = torch.stack([torch.as_tensor(x) for x in dhs], 0)
+    dhs = dhs.to(device=eigvecs.device, dtype=eigvecs.dtype)
+    K, d = dhs.shape
+    ev = eigvals.to(eigvecs.dtype)
+
+    mass = (dhs @ eigvecs).pow(2)
+    mass = (mass / mass.sum(1, keepdim=True)).mean(0)     # (d,) mean mass per rank
+    ev_frac = ev / ev.sum()
+
+    # 1. how much mass is literally on the top few ranks?
+    for k in [1, 2, 3, 5, 8]:
+        print(f"  mass in top-{k} ranks: {mass[:k].sum():.4f}   "
+              f"(their variance frac: {ev_frac[:k].sum():.4f})")
+
+    # 2. decompose the alignment ratio: per-rank contribution mass[r]*ev_frac[r]*d
+    contrib = mass * ev_frac * d
+    order = contrib.argsort(descending=True)
+    print(f"\n  alignment ratio = {contrib.sum():.3f}")
+    print("  top contributors to that ratio:")
+    for r in order[:5].tolist():
+        print(f"    rank {r:>3}: mass={mass[r]:.4f}, ev_frac={ev_frac[r]:.4f}, "
+              f"contributes {contrib[r]:.3f}")
+
+    # 3. the honest split: mass in top-k vs variance in top-k, several k
+    var_cum, mass_cum = ev_frac.cumsum(0), mass.cumsum(0)
+    print("\n  rank | cum-mass | cum-var")
+    for k in [1, 8, 25, 50, 100, 256, 512]:
+        k = min(k, d)
+        print(f"  {k:>4} | {mass_cum[k-1]:.3f}    | {var_cum[k-1]:.3f}")
+    return contrib
+
+
+import os
+import csv
+import numpy as np
+
+
+@torch.no_grad()
+def full_concentration_report(dhs, eigvals, eigvecs,
+                              out_path,
+                              seed=0,
+                              mass_levels=(0.01, 0.05, 0.1, 0.2, 0.3, 0.4, 0.5,
+                                           0.6, 0.7, 0.8, 0.9, 1.0)):
+    """
+    dhs      : (K, d) forget-set mean-shift vectors (K=10), or list of (d,).
+    eigvals  : (d,) descending eigenvalues of retain covariance (centered).
+    eigvecs  : (d, d) matching eigenvectors as COLUMNS, descending.
+    Saves K+1 figures (each 4 subplots) and a CSV of threshold tables.
+    """
+    out_dir = f"{out_path}/concentration_figs"
+    os.makedirs(out_dir, exist_ok=True)
+    if isinstance(dhs, (list, tuple)):
+        dhs = torch.stack([torch.as_tensor(x) for x in dhs], 0)
+    dhs = dhs.to(device=eigvecs.device, dtype=eigvecs.dtype)
+    K, d = dhs.shape
+    ev = eigvals.to(eigvecs.dtype)
+
+    # --- shared retain-spectrum quantities (same for every vector) ---
+    ev_frac = (ev / ev.sum())                 # per-rank variance fraction
+    var_cum = ev_frac.cumsum(0)               # cumulative variance fraction
+    ranks = torch.arange(d)                    # 0-indexed rank axis
+
+    # --- build the list of vectors: 10 shifts + 1 random unit vector ---
+    g = torch.Generator().manual_seed(seed)
+    rvec = torch.randn(d, generator=g, dtype=eigvecs.dtype).to(eigvecs.device)
+    rvec = rvec / rvec.norm()
+    vectors = [(f"retrain{k:02d}", dhs[k]) for k in range(K)]
+    vectors.append(("random", rvec))
+
+    # numpy views for plotting
+    var_cum_np, ranks_np = var_cum.cpu().numpy(), ranks.numpy()
+
+    all_rows = []
+    for name, v in vectors:
+        coeff = v @ eigvecs                    # (d,) projection coefficients
+        mass_frac = (coeff.pow(2) / coeff.pow(2).sum())   # per-rank mass fraction
+        mass_cum = mass_frac.cumsum(0)
+        mc_np = mass_cum.cpu().numpy()
+
+        # ---------- threshold table ----------
+        print(f"\n=== {name} : cum-mass thresholds ===")
+        print(" level | rank | actual cum-mass | cum-variance")
+        for lev in mass_levels:
+            hit = (mass_cum >= lev).nonzero()
+            idx = int(hit[0]) if len(hit) else d - 1
+            print(f"  {lev:.2f}  | {idx:>4} |     {mass_cum[idx]:.4f}      |   {var_cum[idx]:.4f}")
+            all_rows.append({"vector": name, "mass_level": lev, "rank": idx,
+                             "cumulative_mass": float(mass_cum[idx]),
+                             "cumulative_variance": float(var_cum[idx])})
+
+        # ---------- 2-subplot figure ----------
+        fig, ax = plt.subplots(1, 2, figsize=(11, 4.5))
+        fig.suptitle(f"Concentration report — {name}", fontsize=13)
+
+        # (1) cumulative mass vs rank (+ variance overlay for context)
+        a = ax[0]
+        a.plot(ranks_np, mc_np, color="C0", lw=2, label="cum. shift mass")
+        a.plot(ranks_np, var_cum_np, color="C2", lw=1.5, ls="-.", label="cum. retain variance")
+        a.plot(ranks_np, ranks_np / d, color="k", lw=1, ls=":", label="uniform")
+        a.set_xlabel("rank (0 = highest variance)"); a.set_ylabel("cumulative fraction")
+        a.set_title("cumulative mass vs rank"); a.legend(fontsize=8); a.set_ylim(0, 1.01)
+
+        # (3) cumulative mass vs cumulative variance
+        a = ax[1]
+        a.plot(var_cum_np, mc_np, color="C0", lw=2)
+        a.plot([0, 1], [0, 1], color="k", lw=1, ls=":", label="y=x (mass tracks variance)")
+        a.set_xlabel("cumulative retain-variance fraction")
+        a.set_ylabel("cumulative shift-mass fraction")
+        a.set_title("cumulative mass vs cumulative variance"); a.legend(fontsize=8)
+        a.set_xlim(0, 1); a.set_ylim(0, 1.01)
+
+        fig.tight_layout(rect=[0, 0, 1, 0.97])
+        fig.savefig(os.path.join(out_dir, f"concentration_{name}.png"), dpi=300)
+        plt.close(fig)
+
+    # ---------- save all threshold tables to one CSV ----------
+    csv_path = os.path.join(out_dir, "threshold_tables.csv")
+    with open(csv_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["vector", "mass_level", "rank", "cumulative_mass", "cumulative_variance"])
+        w.writeheader(); w.writerows(all_rows)
+
+    print(f"\nSaved {K+1} figures + threshold_tables.csv to '{out_dir}/'")
+    return all_rows
