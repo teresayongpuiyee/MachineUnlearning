@@ -187,7 +187,7 @@ def training_optimization(
             
             utils.save_model(
                 checkpoint=trained_model.state_dict(),
-                model_name=f"eval{args.model_name}{epoch}",
+                model_name=f"{args.model_name}{epoch}",
                 model_root=args.model_root,
             )
         else:
