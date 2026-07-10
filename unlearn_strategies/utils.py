@@ -133,7 +133,8 @@ def training_optimization(
 
     for epoch in tqdm(range(1, epochs + 1), desc= desc):
         loss_list = []
-        trained_model.train()
+        #trained_model.train()
+        trained_model.eval()
         for images, labels in train_loader:
             images = images.to(device, non_blocking=True)
             labels = labels.long().to(device, non_blocking=True)
@@ -183,6 +184,12 @@ def training_optimization(
                 if patience_counter >= args.es_patience:
                     logger.info(f"Early stopping at epoch {epoch}")
                     break
+            
+            utils.save_model(
+                checkpoint=trained_model.state_dict(),
+                model_name=f"eval{args.model_name}{epoch}",
+                model_root=args.model_root,
+            )
         else:
             best_trained_model = copy.deepcopy(trained_model)
 

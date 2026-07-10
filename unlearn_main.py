@@ -179,13 +179,13 @@ def main(args) -> None:
     unlearning_teacher = getattr(models, args.model)(
         num_classes=num_classes, input_channels=num_channels).to(device)
 
-    if args.unlearn_method != "retrain":
+    #if args.unlearn_method != "retrain":
         # Load trained model to unlearn
-        utils.load_model_weights(
-            model=model,
-            model_path=args.model_path,
-            device=device
-        )
+    utils.load_model_weights(
+        model=model,
+        model_path=args.model_path,
+        device=device
+    )
 
     start_time = time.time()
     logger.info("Starting unlearning process...")
