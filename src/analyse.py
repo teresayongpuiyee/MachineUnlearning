@@ -6,12 +6,15 @@ import matplotlib.pyplot as plt
 from sklearn.decomposition import PCA
 
 @torch.no_grad()
-def extract_mean_representation_from_n_models(model_dict, dataloader, device):
-    mean_dict = dict()
+def extract_representation_from_n_models(model_dict, dataloader, device, reduction="mean"):
+    rep_dict = dict()
     
     for model_key, model in model_dict.items():
         model.eval()
-        mean_dict[model_key] = None
+        if reduction == "mean":
+            rep_dict[model_key] = None
+        else:
+            rep_dict[model_key] = []
     
     total_count = 0
 
@@ -19,18 +22,26 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
         x = x.to(device, non_blocking=True)
         total_count += x.size(0)
 
-        # Extract features for all three models
+        # Extract features for all models
         for model_key, model in model_dict.items():
             h = model.feature_extractor(x)
-            if mean_dict[model_key] is None:
-                mean_dict[model_key] = torch.zeros(h.size(1), device=device)
-            mean_dict[model_key] += h.sum(dim=0)
+            if reduction == "mean":
+                if rep_dict[model_key] is None:
+                    rep_dict[model_key] = torch.zeros(h.size(1), device=device)
+                rep_dict[model_key] += h.sum(dim=0)
+            else:
+                rep_dict[model_key].append(h.cpu())
 
-    # Calculate means
-    for model_key in mean_dict:
-        mean_dict[model_key] /= total_count
+    if reduction == "mean":
+        # Calculate means
+        for model_key in rep_dict:
+            rep_dict[model_key] /= total_count
+    else:
+        # Concatenate all representations
+        for model_key in rep_dict:
+            rep_dict[model_key] = torch.cat(rep_dict[model_key], dim=0)
 
-    return mean_dict
+    return rep_dict
 
 def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, dataloader, device, unlearn_method, retrain_model_name, output_path, dataset_name, metrics):
     # Single pass over the data for mean representation extraction
@@ -39,7 +50,7 @@ def compute_rep_shift_alignment(ori_model, retrain_model, unlearned_model, datal
         "retrain": retrain_model,
         "unlearn": unlearned_model
     }
-    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+    mean_reps_dict = extract_representation_from_n_models(model_dict, dataloader, device)
     mean_ori = mean_reps_dict["original"]
     mean_retrain = mean_reps_dict["retrain"]
     mean_unlearn = mean_reps_dict["unlearn"]
@@ -210,7 +221,7 @@ def project_representations(
         "original": ori_model,
         "retrain": retrain_model,
     }
-    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+    mean_reps_dict = extract_representation_from_n_models(model_dict, dataloader, device)
     
     # Move mean reps to CPU to match representations
     mean_ori = mean_reps_dict["original"].to(target_device)

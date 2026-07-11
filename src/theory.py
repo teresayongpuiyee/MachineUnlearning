@@ -2,6 +2,10 @@ import math
 import warnings
 import torch
 import matplotlib.pyplot as plt
+import os
+import csv
+import numpy as np
+import pandas as pd
 
 
 @torch.no_grad()
@@ -220,6 +224,7 @@ def plot_concentration_by_variance(dhs, eigvals, eigvecs, n_random=200, seed=0):
     fig.tight_layout()
     return fig, ax
 
+
 @torch.no_grad()
 def resolve_concentration(dhs, eigvals, eigvecs):
     if isinstance(dhs, (list, tuple)):
@@ -286,11 +291,6 @@ def settle_it(dhs, eigvals, eigvecs):
         k = min(k, d)
         print(f"  {k:>4} | {mass_cum[k-1]:.3f}    | {var_cum[k-1]:.3f}")
     return contrib
-
-
-import os
-import csv
-import numpy as np
 
 
 @torch.no_grad()
@@ -379,3 +379,272 @@ def full_concentration_report(dhs, eigvals, eigvecs,
 
     print(f"\nSaved {K+1} figures + threshold_tables.csv to '{out_dir}/'")
     return all_rows
+
+
+@torch.no_grad()
+def feature_loss_curvature(H_feats, W, eigvecs, mass_ranks, n_random=20, seed=0):
+    """
+    H_feats : (N_r, d) retain features at theta_o (float64).
+    W       : (C, d) final FC weight (logits = W @ h + b), from ORIGINAL model.
+    eigvecs : (d, d) centered eigenvectors, columns, descending (from Task C).
+    Returns c(u) scalars for the top eigenvectors and random directions.
+    """
+    dtype = eigvecs.dtype
+    Hf = H_feats.to(dtype)
+    W = W.to(dtype)                                    # (C, d)
+    N, d = Hf.shape
+
+    # build the feature-space GGN/Fisher: mean_x W^T (diag(p) - p p^T) W
+    logits = Hf @ W.T                                  # (N, C)
+    p = torch.softmax(logits, dim=1)                   # (N, C), original-model probs
+    # accumulate G = (1/N) sum_x W^T (diag(p_x) - p_x p_x^T) W  as a (d,d) matrix
+    # = W^T [ (1/N) sum_x (diag(p_x) - p_x p_x^T) ] W
+    A = torch.diag_embed(p) - p.unsqueeze(2) * p.unsqueeze(1)   # (N, C, C)
+    A_mean = A.mean(0)                                 # (C, C)
+    G = W.T @ A_mean @ W                               # (d, d) feature-space curvature
+    G = 0.5 * (G + G.T)
+
+    def curv(U):                                       # U: (m, d) rows are directions
+        U = U / U.norm(dim=1, keepdim=True)            # unit-normalize
+        return torch.einsum("md,dk,mk->m", U, G, U)    # (m,) u^T G u per row
+
+    # eigenvector directions (top block + explicit mass-jump ranks)
+    top = min(20, d)
+    ranks = sorted(set(list(range(top)) + list(mass_ranks)))
+    Ve = eigvecs[:, ranks].T                           # (len(ranks), d)
+    c_eig = curv(Ve)
+
+    # random unit directions
+    g = torch.Generator().manual_seed(seed)
+    R = torch.randn(n_random, d, generator=g, dtype=dtype)
+    c_rand = curv(R)
+
+    return {"ranks": ranks, "c_eig": c_eig, "c_rand": c_rand, "G": G}
+
+
+# --------------------------------------------------------------------------- #
+# 1. Parallel residual series (signed s_t and RMS Q_t) for ONE reference j
+# --------------------------------------------------------------------------- #
+def compute_parallel_residuals(h_o, h_rj, h_ft_list):
+    """
+    Parameters
+    ----------
+    h_o      : (N, D)  forget-set reps of the original model theta_o  (= epoch-0)
+    h_rj     : (N, D)  forget-set reps of retrain reference j, theta_{rj}
+    h_ft_list: list of (N, D), length T   fine-tune checkpoints epoch 1 .. T
+ 
+    Returns dict:
+        v          : (D,)   unit direction v_j^F
+        delta_norm : float  ||Delta_j||
+        epochs     : (T+1,) [0, 1, ..., T]
+        s          : (T+1,) signed mean parallel residual  s_{t,j},  t = 0..T
+        Q          : (T+1,) RMS parallel residual          Q_{t,j},  t = 0..T
+        s_norm     : (T+1,) s_{t,j} / s_{0,j}   (== 1.0 at t=0 by construction)
+        Q_norm     : (T+1,) Q_{t,j} / Q_{0,j}   (== 1.0 at t=0)
+    """
+    # float64 for a tight sanity check
+    h_o  = torch.as_tensor(h_o).double()
+    h_rj = torch.as_tensor(h_rj).double()
+    checkpoints = [h_o] + [torch.as_tensor(h).double() for h in h_ft_list]  # t = 0..T
+ 
+    N, D = h_o.shape
+    for k, h in enumerate(checkpoints):
+        assert h.shape == (N, D), f"checkpoint {k} shape {tuple(h.shape)} != {(N, D)}"
+    assert h_rj.shape == (N, D), f"h_rj shape {tuple(h_rj.shape)} != {(N, D)}"
+ 
+    # fixed direction from the original->retrain shift on the forget set
+    delta = h_rj.mean(0) - h_o.mean(0)          # (D,)  destination - origin
+    delta_norm = torch.linalg.norm(delta)
+    v = delta / delta_norm                      # (D,)  unit v_j^F
+ 
+    s_list, Q_list = [], []
+    for h_ft in checkpoints:
+        r = h_ft - h_rj                         # (N, D) per-sample residual
+        s_t = r.mean(0) @ v                      # scalar: (mean residual) . v
+        proj = r @ v                             # (N,)  per-sample parallel component
+        Q_t = torch.sqrt((proj ** 2).mean())     # scalar: RMS of parallel component
+        s_list.append(s_t)
+        Q_list.append(Q_t)
+ 
+    s = torch.stack(s_list)                     # (T+1,)
+    Q = torch.stack(Q_list)
+    T = len(h_ft_list)
+    return {
+        "v": v,
+        "delta_norm": delta_norm.item(),
+        "epochs": torch.arange(T + 1),
+        "s": s,
+        "Q": Q,
+        "s_norm": s / s[0],
+        "Q_norm": Q / Q[0],
+    }
+
+
+# --------------------------------------------------------------------------- #
+# 2. Sanity check:  s_{0,j} == -||Delta_j||
+# --------------------------------------------------------------------------- #
+def sanity_check_s0(result, atol=1e-6, rtol=1e-5, raise_on_fail=True, label=""):
+    """
+    Verify the epoch-0 identity for one reference. `result` is the dict from
+    compute_parallel_residuals. Returns (passed, s0, target, abs_err).
+    Raises AssertionError (to STOP the run) if it fails and raise_on_fail=True.
+    """
+    s0 = result["s"][0].item()
+    target = -result["delta_norm"]              # -||Delta_j||
+    abs_err = abs(s0 - target)
+    passed = abs_err <= atol + rtol * abs(target)
+    if not passed and raise_on_fail:
+        raise AssertionError(
+            f"[sanity fail {label}] s_0 = {s0:.8e}  expected -||Delta|| = {target:.8e}  "
+            f"(|err| = {abs_err:.2e}). STOP — check: reps/model mismatch, sign of "
+            f"Delta (must be retrain-minus-original), row misalignment, or feature "
+            f"extraction not in the same eval/BN regime."
+        )
+    return passed, s0, target, abs_err
+
+
+# --------------------------------------------------------------------------- #
+# 3. Two-view plot: signed on linear-y | absolute on log-y
+#    Accepts a list of normalized series (one per reference). Works for either
+#    the s_t/s_0 list or the Q_t/Q_0 list.
+# --------------------------------------------------------------------------- #
+def _to_np(x):
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return np.asarray(x)
+ 
+ 
+def plot_residual_decay(norm_series, epochs=None, quantity="s",
+                        theory_per_epoch=None, title=None,
+                        save_path=None, dpi=300, close=True):
+    """
+    Two-view decay plot for a SINGLE retrain reference.
+ 
+    Left  : signed value,  LINEAR y-axis.
+    Right : |value|,       LOG y-axis  (exponential-rate view / fitting).
+ 
+    Parameters
+    ----------
+    norm_series      : (T+1,) array/tensor — ONE normalized series (== 1.0 at t=0),
+                       e.g. results[j]["s_norm"] or results[j]["Q_norm"].
+    epochs           : (T+1,) indices; defaults to 0..T.
+    quantity         : "s" or "Q"  (labels only).
+    theory_per_epoch : optional float. Overlays (rate)**t. For the bare
+                       weight-decay law pass exp(-lr*wd*S), S = |D_r| / batch_size.
+    title            : figure suptitle (e.g. "Run1  j=3").
+    save_path        : if given, save the figure here (per-reference file).
+    dpi              : save resolution.
+    close            : close the figure after saving (avoids many open figures
+                       when looping over the 10 references).
+ 
+    Returns (fig, (axL, axR)).
+    """
+    s = _to_np(norm_series).astype(float)
+    T1 = len(s)
+    epochs = np.arange(T1, dtype=float) if epochs is None else _to_np(epochs).astype(float)
+    qname = {"s": r"$s_t/s_0$", "Q": r"$Q_t/Q_0$"}.get(quantity, quantity)
+ 
+    fig, (axL, axR) = plt.subplots(1, 2, figsize=(12, 4.5))
+    axL.plot(epochs, s, marker="o", ms=4, lw=1.5, color="C0")
+    axR.plot(epochs, np.abs(s), marker="o", ms=4, lw=1.5, color="C0", label="data")
+ 
+    if theory_per_epoch is not None:
+        theory = theory_per_epoch ** epochs
+        axL.plot(epochs, theory, "r--", lw=2, label="WD law")
+        axR.plot(epochs, theory, "r--", lw=2,
+                 label=rf"WD law $({theory_per_epoch:.5f})^t$")
+        axL.legend(fontsize=9)
+        axR.legend(fontsize=9, loc="lower left")
+ 
+    axL.axhline(0.0, color="grey", lw=0.8, ls=":")
+    axL.set(xlabel="fine-tune epoch t", ylabel=f"signed {qname}",
+            title="signed, linear y")
+    axL.grid(True, alpha=0.3)
+ 
+    axR.set_yscale("log")
+    axR.set(xlabel="fine-tune epoch t", ylabel=f"|{qname}|  (log)",
+            title="absolute, log y  (exponential-rate view)")
+    axR.grid(True, which="both", alpha=0.3)
+ 
+    if title:
+        fig.suptitle(title)
+    fig.tight_layout()
+ 
+    if save_path is not None:
+        parent = os.path.dirname(save_path)
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        fig.savefig(save_path, dpi=dpi, bbox_inches="tight")
+        if close:
+            plt.close(fig)
+    return fig, (axL, axR)
+
+
+# --------------------------------------------------------------------------- #
+# 4. Save per-epoch values to CSV for ONE retrain (long format, appends)
+# --------------------------------------------------------------------------- #
+_CSV_COLUMNS = [
+    "fine_tune_epoch", "retrain_model",
+    "s_t", "s_t/s_0", "log|s_t/s_0|",
+    "Q_t", "Q_t/Q_0", "log(Q_t/Q_0)",
+]
+ 
+
+def save_residual_csv(result, retrain_name, csv_path):
+    """
+    Append the per-epoch values for a SINGLE retrain to a CSV (long format:
+    one row per fine-tune epoch t = 0..T). Creates the file with a header if it
+    does not exist, otherwise appends without a header.
+ 
+    Columns
+    -------
+    fine_tune_epoch : t = 0..T   (0 = original model theta_o)
+    retrain_model   : the retrain identifier you pass in (str)
+    s_t             : signed mean parallel residual
+    s_t/s_0         : signed normalized (== 1.0 at t=0)
+    log|s_t/s_0|    : base 10 log of |s_t/s_0|  (0.0 at t=0; -inf if s_t == 0 exactly)
+    Q_t             : RMS parallel residual  (>= 0)
+    Q_t/Q_0         : normalized RMS (>= 0, == 1.0 at t=0)
+    log(Q_t/Q_0)    : base 10 log of Q_t/Q_0  (0.0 at t=0)
+ 
+    Note: log columns are base 10 log (np.log10).
+    """
+    epochs = _to_np(result["epochs"])
+    s      = _to_np(result["s"])
+    s_norm = _to_np(result["s_norm"])
+    Q      = _to_np(result["Q"])
+    Q_norm = _to_np(result["Q_norm"])
+ 
+    with np.errstate(divide="ignore"):          # log(0) -> -inf, kept honestly
+        log_abs_s_norm = np.log10(np.abs(s_norm))
+        log_Q_norm     = np.log10(Q_norm)
+ 
+    df = pd.DataFrame({
+        "fine_tune_epoch": epochs.astype(int),
+        "retrain_model":   str(retrain_name),
+        "s_t":             s.astype(float),
+        "s_t/s_0":         s_norm.astype(float),
+        "log|s_t/s_0|":    log_abs_s_norm.astype(float),
+        "Q_t":             Q.astype(float),
+        "Q_t/Q_0":         Q_norm.astype(float),
+        "log(Q_t/Q_0)":    log_Q_norm.astype(float),
+    })[_CSV_COLUMNS]
+ 
+    parent = os.path.dirname(csv_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+ 
+    file_exists = os.path.exists(csv_path) and os.path.getsize(csv_path) > 0
+    if file_exists:
+        # guard against appending under a mismatched schema
+        with open(csv_path, "r") as f:
+            existing_header = f.readline().strip().split(",")
+        if existing_header != _CSV_COLUMNS:
+            raise ValueError(
+                f"Column mismatch appending to {csv_path}:\n"
+                f"  existing: {existing_header}\n  new:      {_CSV_COLUMNS}"
+            )
+ 
+    df.to_csv(csv_path, mode="a" if file_exists else "w",
+              header=not file_exists, index=False)
+    return csv_path
