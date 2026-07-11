@@ -46,9 +46,9 @@ def main(args) -> None:
     output_path = f"./{exp_name}/{args.unlearn_class}/theory_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
-    logger = utils.configure_logger(f"{output_path}concentration.log")
-    OUTPUT_CONFIG_FILE = f"{output_path}concentration_config.yaml"
-    OUTPUT_METRICS_FILE = f"{output_path}concentration_metrics.yaml"
+    logger = utils.configure_logger(f"{output_path}{args.exps}.log")
+    OUTPUT_CONFIG_FILE = f"{output_path}{args.exps}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}{args.exps}_metrics.yaml"
 
     config_dict = vars(args).copy()
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
