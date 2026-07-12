@@ -390,7 +390,8 @@ def feature_loss_curvature(H_feats, W, b, eigvecs, n_random=20, seed=0):
     eigvecs : (d, d) centered eigenvectors, columns, descending (from Task C).
     Returns c(u) scalars for the top eigenvectors and random directions.
     """
-    dtype = eigvecs.dtype, device = eigvecs.device
+    dtype = eigvecs.dtype
+    device = eigvecs.device
     Hf = H_feats.to(device=device, dtype=dtype)
     W = W.to(device=device, dtype=dtype)                                    # (C, d)
     b = b.to(device=device, dtype=dtype)                                    # (C,)
