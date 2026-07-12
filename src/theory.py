@@ -382,20 +382,22 @@ def full_concentration_report(dhs, eigvals, eigvecs,
 
 
 @torch.no_grad()
-def feature_loss_curvature(H_feats, W, eigvecs, mass_ranks, n_random=20, seed=0):
+def feature_loss_curvature(H_feats, W, b, eigvecs, n_random=20, seed=0):
     """
     H_feats : (N_r, d) retain features at theta_o (float64).
     W       : (C, d) final FC weight (logits = W @ h + b), from ORIGINAL model.
+    b       : (C,) final FC bias.
     eigvecs : (d, d) centered eigenvectors, columns, descending (from Task C).
     Returns c(u) scalars for the top eigenvectors and random directions.
     """
-    dtype = eigvecs.dtype
-    Hf = H_feats.to(dtype)
-    W = W.to(dtype)                                    # (C, d)
+    dtype = eigvecs.dtype, device = eigvecs.device
+    Hf = H_feats.to(device=device, dtype=dtype)
+    W = W.to(device=device, dtype=dtype)                                    # (C, d)
+    b = b.to(device=device, dtype=dtype)                                    # (C,)
     N, d = Hf.shape
 
     # build the feature-space GGN/Fisher: mean_x W^T (diag(p) - p p^T) W
-    logits = Hf @ W.T                                  # (N, C)
+    logits = Hf @ W.T + b                              # (N, C)
     p = torch.softmax(logits, dim=1)                   # (N, C), original-model probs
     # accumulate G = (1/N) sum_x W^T (diag(p_x) - p_x p_x^T) W  as a (d,d) matrix
     # = W^T [ (1/N) sum_x (diag(p_x) - p_x p_x^T) ] W
@@ -406,20 +408,60 @@ def feature_loss_curvature(H_feats, W, eigvecs, mass_ranks, n_random=20, seed=0)
 
     def curv(U):                                       # U: (m, d) rows are directions
         U = U / U.norm(dim=1, keepdim=True)            # unit-normalize
-        return torch.einsum("md,dk,mk->m", U, G, U)    # (m,) u^T G u per row
+        return (U @ G * U).sum(dim=1)                  # (m,) u^T G u per row
 
     # eigenvector directions (top block + explicit mass-jump ranks)
     top = min(20, d)
-    ranks = sorted(set(list(range(top)) + list(mass_ranks)))
+    ranks = list(range(top))
     Ve = eigvecs[:, ranks].T                           # (len(ranks), d)
     c_eig = curv(Ve)
 
     # random unit directions
     g = torch.Generator().manual_seed(seed)
-    R = torch.randn(n_random, d, generator=g, dtype=dtype)
+    R = torch.randn(n_random, d, generator=g, dtype=dtype).to(device)
     c_rand = curv(R)
 
     return {"ranks": ranks, "c_eig": c_eig, "c_rand": c_rand, "G": G}
+
+
+def overlay_feature_loss_curvature(shift, res, out_dir):
+    all_rows = []
+    ranks = res["ranks"]
+    os.makedirs(out_dir, exist_ok=True)
+    c_by_rank = {r: c.item() for r, c in zip(res["ranks"], res["c_eig"])}
+    cvals = [c_by_rank[r] for r in ranks]
+    lo, hi = res["c_rand"].min().item(), res["c_rand"].max().item()
+
+    for k in range(shift.shape[0]):
+        fig, ax1 = plt.subplots(figsize=(7.5, 4.8))
+        # left axis: retrain shift mass (the thing under test)
+        ax1.plot(ranks, shift[k, ranks].cpu(), color="C0", lw=2, marker="o", ms=3, label="cumulative shift mass")
+        ax1.set_ylabel("cumulative shift mass", color="C0")
+        ax1.set_xlabel("eigenvalue rank")
+
+        # right axis: curvature c(v_r) + random-c baseline band
+        ax2 = ax1.twinx()
+        ax2.plot(ranks, cvals, color="C3", lw=2, marker="o", ms=3, label="curvature c(u)")
+        ax2.axhspan(lo, hi, color="C3", alpha=0.12, label="random-dir curvature range")
+        ax2.axhline(res["c_rand"].mean().item(), color="C3", ls="--", lw=1)
+        ax2.set_ylabel("feature-space loss curvature", color="C3")
+
+        ax1.legend(loc="upper left", fontsize=8); ax2.legend(loc="upper right", fontsize=8)
+        fig.suptitle(f"retrain{k}", fontsize=11)
+        fig.tight_layout()
+        fig.savefig(os.path.join(out_dir, f"loss_curvature_retrain{k}.png"), dpi=300)
+        plt.close(fig)
+
+        for rank in ranks:
+            all_rows.append({"retrain": f"retrain{k}", "rank": rank,
+                             "cumulative_mass": float(shift[k, rank].item()),
+                             "loss_curvature": float(c_by_rank[rank])})
+
+    # ---------- save all tables to one CSV ----------
+    csv_path = os.path.join(out_dir, "mass_loss.csv")
+    with open(csv_path, "w", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["retrain", "rank", "cumulative_mass", "loss_curvature"])
+        w.writeheader(); w.writerows(all_rows)
 
 
 # --------------------------------------------------------------------------- #

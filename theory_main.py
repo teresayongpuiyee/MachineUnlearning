@@ -46,9 +46,10 @@ def main(args) -> None:
     output_path = f"./{exp_name}/{args.unlearn_class}/theory_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
-    logger = utils.configure_logger(f"{output_path}{args.exps}.log")
-    OUTPUT_CONFIG_FILE = f"{output_path}{args.exps}_config.yaml"
-    OUTPUT_METRICS_FILE = f"{output_path}{args.exps}_metrics.yaml"
+    exp_type = "_".join(args.exps)
+    logger = utils.configure_logger(f"{output_path}{exp_type}.log")
+    OUTPUT_CONFIG_FILE = f"{output_path}{exp_type}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}{exp_type}_metrics.yaml"
 
     config_dict = vars(args).copy()
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
@@ -180,11 +181,11 @@ def main(args) -> None:
             dhs.append(shift_retrain)
 
         logger.info("Computing concentration curves...")
-        """
+        
         # dhs: (10, 512) forget-set mean-shift vectors; B from concentration_basis(H_r)
         c_evec = B["centered"]["eigvecs"]                   # (512, 512), columns, descending
         c_curves = theory.concentration_curves(dhs, c_evec, n_random=1, seed=0)
-
+        """
         c_fig, ax = theory.plot_concentration(c_curves)
         c_fig.savefig(f"{output_path}centered_concentration_curve.png", dpi=150)
 
@@ -234,8 +235,49 @@ def main(args) -> None:
         contrib = theory.settle_it(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
         """
 
-        c_all_rows = theory.full_concentration_report(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"], f"{output_path}centered")
-        u_all_rows = theory.full_concentration_report(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"], f"{output_path}uncentered")
+        #c_all_rows = theory.full_concentration_report(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"], f"{output_path}centered")
+        #u_all_rows = theory.full_concentration_report(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"], f"{output_path}uncentered")
+
+        # both curves on the cumulative-VARIANCE axis
+        ev = B["centered"]["eigvals"]
+        ev_frac = (ev / ev.sum())                 # per-rank variance fraction
+        var_cum = ev_frac.cumsum(0)
+        x = var_cum.cpu()                                  # cumulative variance (shared x)
+        
+        mass_cum_shift = c_curves["shift"].mean(0)
+        mass_cum_random = c_curves["random"].mean(0)
+        shift_c = mass_cum_shift.cpu()                     # shift cumulative mass (mean over 10)
+        rand_c  = mass_cum_random.cpu()                    # random cumulative mass
+
+        # gap = shift - random, on the variance axis. positive = more concentrated than chance here
+        gap = shift_c - rand_c
+        print("max |gap| at cum-variance =", x[gap.abs().argmax()].item(),
+            " gap =", gap[gap.abs().argmax()].item())
+        # sign of gap in the tail (variance > 0.74):
+        tail = x > 0.74
+        print("mean gap in tail (var>0.74):", gap[tail].mean().item(),
+            " -> negative means tail is DEPLETED vs random")
+        
+        W = ori_model.fc.weight.detach().cpu()   # (C, d)
+        b = ori_model.fc.bias.detach().cpu()     # (C,)
+
+        print(f"ori_model.fc.weight shape: {W.shape}")
+        print(f"ori_model.fc.bias shape: {b.shape}")
+
+        assert W.shape[0] == num_classes and W.shape[1] == H_r.shape[1]
+
+        logits_r, _ = repr_metrics.get_logits(retain_loader, ori_model)
+        logits_manual = H_r @ W.T + b
+
+        diff = (logits_r - logits_manual).abs()
+        print("max abs diff :", diff.max().item())
+        print("mean abs diff:", diff.mean().item())
+        print("allclose     :", torch.allclose(logits_r, logits_manual, atol=1e-4, rtol=1e-4))
+
+        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"])
+
+        theory.overlay_feature_loss_curvature(c_curves["shift"], curv,
+                                              out_dir=f"{output_path}loss_curvature/centered")
 
     if "finetune" in args.exps:
         retrain_model_path = f"{args.model_dir}/{args.retrain_model_name}.pt"
