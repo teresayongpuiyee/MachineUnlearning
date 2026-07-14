@@ -425,43 +425,65 @@ def feature_loss_curvature(H_feats, W, b, eigvecs, n_random=20, seed=0):
     return {"ranks": ranks, "c_eig": c_eig, "c_rand": c_rand, "G": G}
 
 
-def overlay_feature_loss_curvature(shift, res, out_dir):
+def overlay_feature_loss_curvature(curves, res, out_dir):
     all_rows = []
+    shift = curves["shift"]
+    rand = curves["random"]
     ranks = res["ranks"]
     os.makedirs(out_dir, exist_ok=True)
     c_by_rank = {r: c.item() for r, c in zip(res["ranks"], res["c_eig"])}
     cvals = [c_by_rank[r] for r in ranks]
-    lo, hi = res["c_rand"].min().item(), res["c_rand"].max().item()
+    #lo, hi = res["c_rand"].min().item(), res["c_rand"].max().item()
+    crand_by_rank = {r: c_rand.item() for r, c_rand in zip(res["ranks"], res["c_rand"])}
+    crandvals = [crand_by_rank[r] for r in ranks]
 
-    for k in range(shift.shape[0]):
+    for k in range(shift.shape[0] + 1):
         fig, ax1 = plt.subplots(figsize=(7.5, 4.8))
         # left axis: retrain shift mass (the thing under test)
-        ax1.plot(ranks, shift[k, ranks].cpu(), color="C0", lw=2, marker="o", ms=3, label="cumulative shift mass")
-        ax1.set_ylabel("cumulative shift mass", color="C0")
-        ax1.set_xlabel("eigenvalue rank")
+        if k < shift.shape[0]:
+            ax1.plot(ranks, shift[k, ranks].cpu(), color="C0", lw=2, marker="o", ms=3, label="cumulative shift mass")
+        else:
+            ax1.plot(ranks, rand.mean(0)[ranks].cpu(), color="C0", lw=2, marker="s", ms=3, label="cumulative random mass")
+        ax1.set_ylim(-0.01, 1.01)
+        ax1.set_ylabel("cumulative fraction", color="C0")
+        ax1.set_xlabel("rank (0 = highest variance)")
 
         # right axis: curvature c(v_r) + random-c baseline band
         ax2 = ax1.twinx()
-        ax2.plot(ranks, cvals, color="C3", lw=2, marker="o", ms=3, label="curvature c(u)")
-        ax2.axhspan(lo, hi, color="C3", alpha=0.12, label="random-dir curvature range")
-        ax2.axhline(res["c_rand"].mean().item(), color="C3", ls="--", lw=1)
-        ax2.set_ylabel("feature-space loss curvature", color="C3")
+        ax2.plot(ranks, cvals, color="C3", lw=2, marker="o", ms=3, label="c(centered eigenvector)")
+        ax2.plot(ranks, crandvals, color="C3", alpha=0.5, lw=2, marker="s", ms=3, label="c(random direction)")
+        #ax2.axhspan(lo, hi, color="C3", alpha=0.12, label="random-dir curvature range")
+        #ax2.axhline(res["c_rand"].mean().item(), color="C3", ls="--", lw=1)
+        ax2.set_ylabel("feature-space loss curvature, c(u)", color="C3")
 
         ax1.legend(loc="upper left", fontsize=8); ax2.legend(loc="upper right", fontsize=8)
-        fig.suptitle(f"retrain{k}", fontsize=11)
+        if k < shift.shape[0]:
+            fig.suptitle(f"retrain{k}", fontsize=11)
+        else:
+            fig.suptitle(f"random unit vector", fontsize=11)
         fig.tight_layout()
-        fig.savefig(os.path.join(out_dir, f"loss_curvature_retrain{k}.png"), dpi=300)
+        if k < shift.shape[0]:
+            fig.savefig(os.path.join(out_dir, f"loss_curvature_retrain{k}.png"), dpi=300)
+        else:
+            fig.savefig(os.path.join(out_dir, f"loss_curvature_random.png"), dpi=300)
         plt.close(fig)
 
         for rank in ranks:
-            all_rows.append({"retrain": f"retrain{k}", "rank": rank,
-                             "cumulative_mass": float(shift[k, rank].item()),
-                             "loss_curvature": float(c_by_rank[rank])})
+            if k < shift.shape[0]:
+                all_rows.append({"retrain": f"retrain{k}", "rank": rank,
+                                "cumulative_mass": float(shift[k, rank].item()),
+                                "loss_curvature": float(c_by_rank[rank]),
+                                "random_curvature": float(crand_by_rank[rank])})
+            else:
+                all_rows.append({"retrain": "random", "rank": rank,
+                                "cumulative_mass": float(rand.mean(0)[rank].item()),
+                                "loss_curvature": float(c_by_rank[rank]),
+                                "random_curvature": float(crand_by_rank[rank])})
 
     # ---------- save all tables to one CSV ----------
     csv_path = os.path.join(out_dir, "mass_loss.csv")
     with open(csv_path, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=["retrain", "rank", "cumulative_mass", "loss_curvature"])
+        w = csv.DictWriter(f, fieldnames=["retrain", "rank", "cumulative_mass", "loss_curvature", "random_curvature"])
         w.writeheader(); w.writerows(all_rows)
 
 

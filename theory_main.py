@@ -276,7 +276,7 @@ def main(args) -> None:
 
         curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"])
 
-        theory.overlay_feature_loss_curvature(c_curves["shift"], curv,
+        theory.overlay_feature_loss_curvature(c_curves, curv,
                                               out_dir=f"{output_path}loss_curvature/centered")
 
     if "finetune" in args.exps:
