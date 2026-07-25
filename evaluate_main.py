@@ -34,12 +34,17 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               "mia_rep", 
                               "cka_o",
                               "cka_r",
-                              "tsne"
+                              "tsne",
+                              "relearn_attack"
                               ], 
                     help= "Metrics to evaluate")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
+parser.add_argument("-relearn_lr", type=float, default= 1e-3, help='Learning rate')
+parser.add_argument("-relearn_epoch", type=int, default= 30, help='Epoch')
+parser.add_argument("-sample_size", type=int, default= 5, help='Sample size')
+
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
@@ -259,6 +264,22 @@ def main(args) -> None:
             "retain_unlearn_retrain": cka_r_r,
             "rus_unlearn_retrain": rus_r,
         }
+
+    if "relearn_attack" in args.metrics:
+        repr_metrics.relearning_attack(
+            logger,
+            unlearned_model,
+            unlearn_loader,
+            retain_loader,
+            test_loader,
+            sample_size=args.sample_size,
+            epoch=args.relearn_epoch,
+            lr=args.relearn_lr,
+            device=device,
+            seed=args.seed,
+            model_name=unlearn_method,
+            save_dir=output_path,
+        )
 
     metrics_dict = {
         "classification": cls_metrics_dict,

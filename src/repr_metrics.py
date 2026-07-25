@@ -1,17 +1,19 @@
 import os
+import csv
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset, ConcatDataset
 from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import f1_score
 from typing import Tuple, Optional
 from torch.nn import functional as F
+from unlearn_strategies import utils
 
 # t-SNE visualization
 import matplotlib.pyplot as plt
@@ -716,3 +718,67 @@ def representation_unlearning_score(cka_f, cka_r, original=False):
 
     rus = 2 * cka_f * cka_r / (cka_f + cka_r + 1e-8)
     return rus
+
+
+def relearning_attack(
+        logger,
+        model,
+        unlearn_loader: DataLoader,
+        retain_loader: DataLoader,
+        test_loader: DataLoader,
+        sample_size: int,
+        epoch: int,
+        lr: float,
+        device: str,
+        seed: int = 42,
+        model_name: str = "model",
+        save_dir: str = ".",
+):
+    # Seeded generator so sampling (and the loader shuffle) is reproducible.
+    generator = torch.Generator().manual_seed(seed)
+
+    # sample from unlearn_loader dataset only based on sample_size
+    unlearn_ds = unlearn_loader.dataset
+    n = min(sample_size, len(unlearn_ds))
+    sampled_idx = torch.randperm(len(unlearn_ds), generator=generator)[:n]
+    relearning_ds = Subset(unlearn_ds, sampled_idx.tolist())
+
+    batch_size = sample_size
+
+    # construct relearning loader from sampled dataset
+    relearning_loader = DataLoader(
+        relearning_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=unlearn_loader.num_workers,
+        pin_memory=True,
+        persistent_workers=True,
+        generator=generator,
+    )
+
+    # Fine tune model
+    ft_model, log_dict = utils.training_optimization(
+        logger,
+        model= model,
+        train_loader= relearning_loader,
+        test_loader= test_loader,
+        epochs= epoch,
+        device= device,
+        desc= "Relearning attack",
+        opt="sgd",
+        lr=lr,
+        momentum=0,
+        weight_decay=0,
+        unlearn_loader= unlearn_loader,
+        retain_loader= retain_loader,
+    )
+
+    # write dict to csv file, naming model_name+seed+sample_size
+    csv_path = f"{save_dir}{model_name}_seed{seed}_size{sample_size}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(log_dict[0].keys()))
+        writer.writeheader()
+        writer.writerows(log_dict)
+    logger.info(f"Saved relearning attack log to {csv_path}")
+
+    return ft_model, log_dict

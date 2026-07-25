@@ -46,6 +46,46 @@ def evaluate(model, val_loader, device):
     return validation_epoch_end(copy_model, outputs)
 
 
+def validation_step_by_class(model, batch, device, unlearn_class):
+    images, clabels = batch
+    images, clabels = images.to(device, non_blocking=True), clabels.long().to(device, non_blocking=True)
+    out = model(images)  # Generate predictions
+    loss = F.cross_entropy(out, clabels)  # Calculate loss
+    _, preds = torch.max(out, dim=1)
+    correct = preds == clabels
+
+    unlearn_mask = clabels == unlearn_class
+    remain_mask = ~unlearn_mask
+    return {
+        "Loss": loss.detach(),
+        "UnlearnCorrect": correct[unlearn_mask].sum().item(),
+        "UnlearnTotal": unlearn_mask.sum().item(),
+        "RemainCorrect": correct[remain_mask].sum().item(),
+        "RemainTotal": remain_mask.sum().item(),
+    }
+
+
+def validation_epoch_end_by_class(outputs):
+    epoch_loss = torch.stack([x["Loss"] for x in outputs]).mean()  # Combine losses
+
+    unlearn_correct = sum(x["UnlearnCorrect"] for x in outputs)
+    unlearn_total = sum(x["UnlearnTotal"] for x in outputs)
+    remain_correct = sum(x["RemainCorrect"] for x in outputs)
+    remain_total = sum(x["RemainTotal"] for x in outputs)
+
+    unlearn_acc = (unlearn_correct / unlearn_total) * 100 if unlearn_total > 0 else float("nan")
+    remain_acc = (remain_correct / remain_total) * 100 if remain_total > 0 else float("nan")
+    return {"Loss": epoch_loss.item(), "UnlearnAcc": unlearn_acc, "RemainAcc": remain_acc}
+
+
+@torch.no_grad()
+def evaluate_by_class(model, val_loader, device, unlearn_class: int):
+    copy_model = copy.deepcopy(model)
+    copy_model.eval()
+    outputs = [validation_step_by_class(copy_model, batch, device, unlearn_class) for batch in val_loader]
+    return validation_epoch_end_by_class(outputs)
+
+
 def collect_entropy(
     data_loader: DataLoader,
     model: torch.nn.Module,

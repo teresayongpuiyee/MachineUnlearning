@@ -31,6 +31,7 @@ def training_optimization(
     nesterov: bool = False,
     label_smoothing: float = 0.0,
     mixup: bool = False,
+    **kwargs,
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -131,9 +132,17 @@ def training_optimization(
     else:
         loss_func = nn.CrossEntropyLoss(label_smoothing=label_smoothing).to(device)
 
+    if desc == "Relearning attack":
+        log_dict = []
+        unlearn_loader = kwargs.pop('unlearn_loader', None)
+        retain_loader = kwargs.pop('retain_loader', None)
+
     for epoch in tqdm(range(1, epochs + 1), desc= desc):
         loss_list = []
-        trained_model.train()
+        if desc == "Relearning attack":
+            trained_model.eval()
+        else:
+            trained_model.train()
         for images, labels in train_loader:
             images = images.to(device, non_blocking=True)
             labels = labels.long().to(device, non_blocking=True)
@@ -154,11 +163,26 @@ def training_optimization(
                     warmup_scheduler.step()
 
         mean_loss = np.mean(np.array(loss_list))
-        train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
-        test_metrics = metrics.evaluate(val_loader= test_loader, model= trained_model, device= device)
+        #train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
+        test_metrics = metrics.evaluate_by_class(val_loader= test_loader, model= trained_model, device= device, unlearn_class=0)
         test_loss = test_metrics['Loss']
-        test_acc = test_metrics['Acc']
-        logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Test Loss: {test_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
+        unlearn_test_acc = test_metrics['UnlearnAcc']
+        retain_test_acc = test_metrics['RemainAcc']
+
+        if desc == "Relearning attack":
+            unlearn_acc = metrics.evaluate(val_loader= unlearn_loader, model= trained_model, device= device)['Acc']
+            retain_acc = metrics.evaluate(val_loader= retain_loader, model= trained_model, device= device)['Acc']
+            
+            log_dict.append({
+                "epoch": epoch,
+                "train_loss": mean_loss,
+                "test_loss": test_loss,
+                "forget_acc": unlearn_acc,
+                "retain_acc": retain_acc,
+                "forget_test_acc": unlearn_test_acc,
+                "retain_test_acc": retain_test_acc,
+            })
+        #logger.info( f"Epochs: {epoch} Train Loss: {mean_loss:.4f} Test Loss: {test_loss:.4f} Train Acc: {train_acc} Test acc: {test_acc}")
 
         if desc == "Retraining model":
             if lr_scheduler is not None and epoch >= args.warm:
@@ -167,10 +191,10 @@ def training_optimization(
                 else:
                     lr_scheduler.step()
 
-            # Get retrain model with best test acc
-            if test_acc > best_test_acc:
-                best_test_acc = test_acc
-                best_trained_model = copy.deepcopy(trained_model)
+            ## Get retrain model with best test acc
+            #if test_acc > best_test_acc:
+            #    best_test_acc = test_acc
+            best_trained_model = copy.deepcopy(trained_model)
 
             # To prevent overfitting
             if args.early_stop:
@@ -186,6 +210,8 @@ def training_optimization(
         else:
             best_trained_model = copy.deepcopy(trained_model)
 
+    if desc == "Relearning attack":
+        return best_trained_model, log_dict
     return best_trained_model
 
 
