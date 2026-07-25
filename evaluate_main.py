@@ -42,6 +42,8 @@ parser.add_argument("-metrics", type= str, nargs='+',
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
 parser.add_argument("-relearn_lr", type=float, default= 1e-3, help='Learning rate')
+parser.add_argument("-relearn_momentum", type=float, default= 0.0, help='Momentum')
+parser.add_argument("-relearn_wd", type=float, default= 0.0, help='Weight decay')
 parser.add_argument("-relearn_epoch", type=int, default= 30, help='Epoch')
 parser.add_argument("-sample_size", type=int, default= 5, help='Sample size')
 
@@ -275,6 +277,8 @@ def main(args) -> None:
             sample_size=args.sample_size,
             epoch=args.relearn_epoch,
             lr=args.relearn_lr,
+            momentum=args.relearn_momentum,
+            weight_decay=args.relearn_wd,
             device=device,
             seed=args.seed,
             model_name=unlearn_method,
