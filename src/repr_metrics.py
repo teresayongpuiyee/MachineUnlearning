@@ -11,6 +11,7 @@ os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import f1_score
 from typing import Tuple, Optional
+from torch.nn import functional as F
 
 # t-SNE visualization
 import matplotlib.pyplot as plt
@@ -435,6 +436,7 @@ def sure_miars(
 
 def linear_probing(
     train_loader: DataLoader,
+    test_loader: DataLoader,
     retain_eval_loader: DataLoader,
     unlearn_eval_loader: DataLoader,
     model: torch.nn.Module,
@@ -480,6 +482,27 @@ def linear_probing(
     #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss()
 
+    # Evaluation
+    def eval_metrics(loader):
+        head.eval()
+        correct = 0
+        total = 0
+        loss_sum = 0
+        with torch.no_grad():
+            for x, y in loader:
+                x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
+                feat = model.feature_extractor(x)
+                logits = head(feat)
+                loss = F.cross_entropy(logits, y, reduction='sum')
+                loss_sum += loss.item()
+                pred = logits.argmax(dim=1)
+                correct += (pred == y).sum().item()
+                total += y.size(0)
+
+        acc = 100.0 * correct / total if total > 0 else 0.0
+        loss = loss_sum / total if total > 0 else 0.0
+        return acc, loss
+    
     # Train linear head
     for _ in range(epochs):
         head.train()
@@ -493,24 +516,12 @@ def linear_probing(
             loss.backward()
             optimizer.step()
         #scheduler.step()
+        retain_acc, _ = eval_metrics(retain_eval_loader)
+        forget_acc, _ = eval_metrics(unlearn_eval_loader)
+        test_acc, test_loss = eval_metrics(test_loader)
 
-    # Evaluation
-    def eval_accuracy(loader):
-        head.eval()
-        correct = 0
-        total = 0
-        with torch.no_grad():
-            for x, y in loader:
-                x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
-                feat = model.feature_extractor(x)
-                logits = head(feat)
-                pred = logits.argmax(dim=1)
-                correct += (pred == y).sum().item()
-                total += y.size(0)
-        return 100.0 * correct / total if total > 0 else 0.0
-
-    retain_acc = eval_accuracy(retain_eval_loader)
-    forget_acc = eval_accuracy(unlearn_eval_loader)
+    retain_acc, _ = eval_metrics(retain_eval_loader)
+    forget_acc, _ = eval_metrics(unlearn_eval_loader)
 
     return {
         "retain_accuracy": retain_acc,
