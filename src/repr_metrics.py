@@ -745,7 +745,7 @@ def relearning_attack(
     sampled_idx = torch.randperm(len(unlearn_ds), generator=generator)[:n]
     relearning_ds = Subset(unlearn_ds, sampled_idx.tolist())
 
-    batch_size = sample_size
+    batch_size = min(sample_size, unlearn_loader.batch_size)
 
     # construct relearning loader from sampled dataset
     relearning_loader = DataLoader(
