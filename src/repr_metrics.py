@@ -925,6 +925,37 @@ def representation_unlearning_score(cka_f, cka_r, original=False):
     return rus
 
 
+from itertools import chain
+
+def _endless(loader):
+    # re-iterates the retain loader forever (reshuffles each pass, no caching)
+    while True:
+        for batch in loader:
+            yield batch
+
+
+class BalancedRelearnLoader:
+    """Yields mixed batches: f forget + r*f retain. Epoch length = forget passes."""
+    def __init__(self, forget_loader, retain_loader, r):
+        self.forget_loader = forget_loader
+        self.retain_loader = retain_loader
+        self.r = r
+        self.dataset = forget_loader.dataset      # epoch tracks the forget set
+        self.batch_size = forget_loader.batch_size
+
+    def __len__(self):
+        return len(self.forget_loader)            # = ceil(k_f / f) steps per epoch
+
+    def __iter__(self):
+        retain_it = _endless(self.retain_loader)
+        for fx, fy in self.forget_loader:         # fx: f (or ragged last)
+            rx, ry = next(retain_it)              # rx: r*f
+            k = self.r * fx.size(0)               # keep exact ratio on ragged batch
+            x = torch.cat([fx, rx[:k]], dim=0)    # total = f*(1+r)
+            y = torch.cat([fy, ry[:k]], dim=0)
+            yield x, y
+
+
 def relearning_attack(
         logger,
         model,
@@ -940,9 +971,12 @@ def relearning_attack(
         seed: int = 42,
         model_name: str = "model",
         save_dir: str = ".",
+        retain_per_forget=None,          # r: None/0 -> forget-only; e.g. 9 -> balanced
 ):
     # Seeded generator so sampling (and the loader shuffle) is reproducible.
     generator = torch.Generator().manual_seed(seed)
+    g_forget = torch.Generator().manual_seed(seed + 1)
+    g_retain = torch.Generator().manual_seed(seed + 2)
 
     # sample from unlearn_loader dataset only based on sample_size
     unlearn_ds = unlearn_loader.dataset
@@ -950,18 +984,31 @@ def relearning_attack(
     sampled_idx = torch.randperm(len(unlearn_ds), generator=generator)[:n]
     relearning_ds = Subset(unlearn_ds, sampled_idx.tolist())
 
-    batch_size = min(sample_size, unlearn_loader.batch_size)
+    f = min(sample_size, unlearn_loader.batch_size)
 
     # construct relearning loader from sampled dataset
-    relearning_loader = DataLoader(
+    forget_loader = DataLoader(
         relearning_ds,
-        batch_size=batch_size,
+        batch_size=f,
         shuffle=True,
         num_workers=unlearn_loader.num_workers,
         pin_memory=True,
         persistent_workers=True,
-        generator=generator,
+        generator=g_forget,
+        drop_last=False,
     )
+
+    # ---- pick the train loader for the chosen variant ----
+    if retain_per_forget:                              # balanced retain-rehearsal
+        retain_ds = retain_loader.dataset             # D_r train (disjoint from retain-test)
+        retain_ft_loader = DataLoader(
+            retain_ds, batch_size=retain_per_forget * f, shuffle=True, drop_last=True,
+            num_workers=retain_loader.num_workers, pin_memory=True,
+            persistent_workers=True, generator=g_retain,
+        )
+        relearning_loader = BalancedRelearnLoader(forget_loader, retain_ft_loader, retain_per_forget)
+    else:                                              # forget-only (your current variant)
+        relearning_loader = forget_loader
 
     # Fine tune model
     ft_model, log_dict = utils.training_optimization(
@@ -980,8 +1027,10 @@ def relearning_attack(
         retain_loader= retain_loader,
     )
 
+    tag = f"_r{retain_per_forget}" if retain_per_forget else ""
+
     # write dict to csv file, naming model_name+seed+sample_size
-    csv_path = f"{save_dir}{model_name}_seed{seed}_size{sample_size}.csv"
+    csv_path = f"{save_dir}{model_name}_seed{seed}_size{sample_size}{tag}.csv"
     with open(csv_path, "w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(log_dict[0].keys()))
         writer.writeheader()

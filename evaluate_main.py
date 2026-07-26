@@ -47,6 +47,7 @@ parser.add_argument("-relearn_momentum", type=float, default= 0.0, help='Momentu
 parser.add_argument("-relearn_wd", type=float, default= 0.0, help='Weight decay')
 parser.add_argument("-relearn_epoch", type=int, default= 30, help='Epoch')
 parser.add_argument("-sample_size", type=int, default= 5, help='Sample size')
+parser.add_argument("-retain_per_forget", type=int, default= 0, help='Number of retain class')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -295,6 +296,7 @@ def main(args) -> None:
             seed=args.seed,
             model_name=unlearn_method,
             save_dir=output_path,
+            retain_per_forget=args.retain_per_forget
         )
 
     metrics_dict = {
