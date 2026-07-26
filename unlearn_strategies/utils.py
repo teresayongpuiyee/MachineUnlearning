@@ -170,6 +170,9 @@ def training_optimization(
         unlearn_test_acc = test_metrics['UnlearnAcc']
         retain_test_acc = test_metrics['RemainAcc']
 
+        test_loss = unlearn_test_loss
+        test_acc = unlearn_test_acc
+
         if desc == "Relearning attack":
             unlearn_acc = metrics.evaluate(val_loader= unlearn_loader, model= trained_model, device= device)['Acc']
             retain_acc = metrics.evaluate(val_loader= retain_loader, model= trained_model, device= device)['Acc']
@@ -194,9 +197,9 @@ def training_optimization(
                     lr_scheduler.step()
 
             ## Get retrain model with best test acc
-            #if test_acc > best_test_acc:
-            #    best_test_acc = test_acc
-            best_trained_model = copy.deepcopy(trained_model)
+            if test_acc > best_test_acc:
+                best_test_acc = test_acc
+                best_trained_model = copy.deepcopy(trained_model)
 
             # To prevent overfitting
             if args.early_stop:
