@@ -6,12 +6,12 @@ import torch.optim as optim
 from tqdm import tqdm
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from torch.utils.data import DataLoader, Subset, ConcatDataset
+from torch.utils.data import DataLoader, Subset
 from sklearn.neighbors import KNeighborsClassifier
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
 from sklearn.model_selection import StratifiedKFold, train_test_split
 from sklearn.metrics import f1_score
-from typing import Tuple, Optional
+from typing import Tuple, Optional, Sequence
 from torch.nn import functional as F
 from unlearn_strategies import utils
 
@@ -21,6 +21,9 @@ import matplotlib.colors as mcolors
 from openTSNE import TSNE
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
+from sklearn.exceptions import ConvergenceWarning
+import warnings
+import random
 
 def get_logits(
     loader: DataLoader,
@@ -437,15 +440,125 @@ def sure_miars(
 
     return metrics_dict, forget_asr
 
+def _seed_all(s: int) -> None:
+    random.seed(s)
+    np.random.seed(s)
+    torch.manual_seed(s)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(s)
+ 
+ 
+def _collect_features_np(
+    loader: Optional[DataLoader],
+    model: torch.nn.Module,
+    n_passes: int = 1,
+    seed: Optional[int] = None,
+) -> Optional[tuple]:
+    """Stack features + labels over n_passes of `loader` via get_representations().
+    Augmentation (if in the loader's transform) is resampled per pass -- passes
+    advance the RNG naturally, so reproducibility comes from your runner's global
+    seed. If `seed` is given, reseed per pass (seed + p). None => leave RNG alone.
+    Returns numpy arrays, or None if loader is None."""
+    if loader is None:
+        return None
+    Xs, ys = [], []
+    for p in range(n_passes):
+        if seed is not None:
+            _seed_all(seed + p)
+        X, y = get_representations(loader, model)   # torch tensors on CPU
+        Xs.append(X.numpy())
+        ys.append(y.numpy())
+    return np.concatenate(Xs, 0), np.concatenate(ys, 0)
+ 
+ 
+def _make_lr(C: float, tol: float, max_iter: int, fit_intercept: bool) -> LogisticRegression:
+    kwargs = dict(penalty="l2", C=C, solver="lbfgs", tol=tol,
+                  max_iter=max_iter, fit_intercept=fit_intercept)
+    # multinomial is the L-BFGS default in modern sklearn; force it where the kwarg
+    # still exists (<1.7) and fall back where it was removed (>=1.7 raises TypeError).
+    try:
+        return LogisticRegression(multi_class="multinomial", **kwargs)
+    except TypeError:
+        return LogisticRegression(**kwargs)
+ 
+ 
+def logistic_probe_lbfgs(
+    train_loader: DataLoader,
+    retain_eval_loader: DataLoader,        # train split, clean -> train-set decodability
+    unlearn_eval_loader: DataLoader,       # train split, clean
+    model: torch.nn.Module,
+    test_retain_loader: Optional[DataLoader] = None,   # test split -> generalization
+    test_unlearn_loader: Optional[DataLoader] = None,
+    C: float = 1.0,                 # L2 strength; lambda = 1/C
+    tol: float = 1e-4,
+    max_iter: int = 5000,
+    fit_intercept: bool = True,
+    n_aug_passes: int = 1,
+    seed: Optional[int] = None,     # leave None: your runner owns global seeding
+    val_loader: Optional[DataLoader] = None,   # C selection only; disjoint from all report sets
+    C_grid: Optional[Sequence[float]] = None,
+) -> dict:
+    """One L-BFGS probe fit on augmented train features; reports the four splits
+    your SGD probe reports. Use ONE fixed C across all models."""
+    X_tr, y_tr = _collect_features_np(train_loader, model, n_passes=n_aug_passes, seed=seed)
+ 
+    scaler = StandardScaler().fit(X_tr)
+    X_tr_s = scaler.transform(X_tr)
+ 
+    if val_loader is not None and C_grid:
+        Xv, yv = _collect_features_np(val_loader, model, n_passes=1, seed=None)
+        Xv_s = scaler.transform(Xv)
+        best_C, best_acc = C, -1.0
+        for c in C_grid:
+            acc_c = _make_lr(c, tol, max_iter, fit_intercept).fit(X_tr_s, y_tr).score(Xv_s, yv)
+            if acc_c > best_acc:
+                best_acc, best_C = acc_c, c
+        C = best_C
+ 
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter("always", ConvergenceWarning)
+        clf = _make_lr(C, tol, max_iter, fit_intercept).fit(X_tr_s, y_tr)
+    n_iter = int(np.max(clf.n_iter_))
+    converged = not any(issubclass(x.category, ConvergenceWarning) for x in w)
+ 
+    def _acc(loader):
+        data = _collect_features_np(loader, model, n_passes=1, seed=None)  # clean, single pass
+        if data is None:
+            return None
+        X, y = data
+        return 100.0 * clf.score(scaler.transform(X), y)
+ 
+    return {
+        # train-set decodability (Table 12 Acc_probe_u / Acc_probe_r); primary band quantity
+        "forget_accuracy": _acc(unlearn_eval_loader),
+        "retain_accuracy": _acc(retain_eval_loader),
+        # test-set generalization
+        "test_forget_accuracy": _acc(test_unlearn_loader),
+        "test_retain_accuracy": _acc(test_retain_loader),
+        # ---- four items to report explicitly ----
+        "fit_intercept": fit_intercept, "C": C, "l2_lambda": 1.0 / C,
+        "tol": tol, "max_iter": max_iter,
+        # ---- protocol + convergence ----
+        "n_aug_passes": n_aug_passes, "seed": seed,
+        "n_iter": n_iter, "converged": converged,
+        "solver": "lbfgs", "multi_class": "multinomial",
+    }
+
+
 def linear_probing(
     train_loader: DataLoader,
     test_loader: DataLoader,
     retain_eval_loader: DataLoader,
     unlearn_eval_loader: DataLoader,
+    test_retain_loader: DataLoader,
+    test_unlearn_loader: DataLoader,
     model: torch.nn.Module,
     num_classes: int,
     epochs: int = 10,
     lr: float = 1e-3,
+    momentum: float = 0.0,
+    patience: int = 0,
+    batch_size: int = 128,
 ) -> dict:
     """
     Trains a linear probe (head) on top of frozen model representations using SGD and cross-entropy,
@@ -479,8 +592,12 @@ def linear_probing(
         param.requires_grad = False
     for param in head.parameters():
         param.requires_grad = True
+
+    train_loader = DataLoader(
+        train_loader.dataset, batch_size=batch_size, shuffle=True, num_workers=train_loader.num_workers, pin_memory=True, persistent_workers=True
+    )
     
-    optimizer = optim.SGD(head.parameters(), lr=lr)
+    optimizer = optim.SGD(head.parameters(), lr=lr, momentum= momentum)
     #optimizer = optim.Adam(head.parameters(), lr=lr, weight_decay=1e-4)
     #scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=epochs)
     criterion = nn.CrossEntropyLoss()
@@ -505,9 +622,16 @@ def linear_probing(
         acc = 100.0 * correct / total if total > 0 else 0.0
         loss = loss_sum / total if total > 0 else 0.0
         return acc, loss
-    
+
+    best_test_loss = float('inf')
+    best_epoch = 0
+    patience_counter = 0
+
+    log_dict = []
+
     # Train linear head
-    for _ in range(epochs):
+    for epoch in range(epochs):
+        loss_list = []
         head.train()
         for x, y in train_loader:
             x, y = x.to(device, non_blocking=True), y.to(device, non_blocking=True)
@@ -518,17 +642,36 @@ def linear_probing(
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            loss_list.append(loss.item())
         #scheduler.step()
+        train_loss = np.mean(np.array(loss_list))
         retain_acc, _ = eval_metrics(retain_eval_loader)
         forget_acc, _ = eval_metrics(unlearn_eval_loader)
-        test_acc, test_loss = eval_metrics(test_loader)
+        _, test_loss = eval_metrics(test_loader)
+        test_retain_acc, _ = eval_metrics(test_retain_loader)
+        test_forget_acc, _ = eval_metrics(test_unlearn_loader)
 
-    retain_acc, _ = eval_metrics(retain_eval_loader)
-    forget_acc, _ = eval_metrics(unlearn_eval_loader)
+        log_dict.append({
+            "epoch": epoch,
+            "train_loss": train_loss,
+            "test_loss": test_loss,
+            "forget_acc": forget_acc,
+            "retain_acc": retain_acc,
+            "test_retain_acc": test_retain_acc,
+            "test_forget_acc": test_forget_acc,
+        })
+
+        if test_loss < best_test_loss:
+            best_test_loss = test_loss
+            best_epoch = epoch
+            patience_counter = 0
+        else:
+            patience_counter += 1
+            if patience > 0 and patience_counter >= patience:
+                break
 
     return {
-        "retain_accuracy": retain_acc,
-        "forget_accuracy": forget_acc
+        "best_epoch": best_epoch,
     }
 
 def binary_forget_probe(

@@ -7,6 +7,7 @@ from unlearn_strategies import strategies
 import time
 import yaml
 import torch
+import csv
 
 parser = argparse.ArgumentParser()
 # Device
@@ -56,7 +57,11 @@ parser.add_argument("-scenario", type= str, default= "class",
                     choices= ["class", "client", "sample"], help= "Training and unlearning scenario")
 
 # Unlearn Hyperparameter
-parser.add_argument("-linear_probe_lr", type=float, default= 1e-3, help='Learning rate')
+parser.add_argument("-probe_epoch", type=int, default= 10, help='Probe epoch')
+parser.add_argument("-probe_lr", type=float, default= 1e-3, help='Probe learning rate')
+parser.add_argument("-probe_momentum", type=float, default= 0.0, help='Probe momentum')
+parser.add_argument("-probe_patience", type=int, default= 0, help='Probe early stop patience')
+parser.add_argument("-probe_bs", type=int, default= 128, help='Probe batch size')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -242,15 +247,30 @@ def main(args) -> None:
     #    unlearned_model=unlearned_model
     #)
 
-    linear_probe_acc = repr_metrics.linear_probing(
+    linear_probe_acc, log_dict = repr_metrics.linear_probing(
         train_loader= train_aug_loader,
+        test_loader=test_loader,
         retain_eval_loader= retain_eval_loader,
         unlearn_eval_loader= unlearn_eval_loader,
+        test_retain_loader=test_retain_loader,
+        test_unlearn_loader=test_unlearn_loader,
         model= unlearned_model,
         num_classes= num_classes,
-        lr= args.linear_probe_lr,
+        epochs= args.probe_epochs,
+        lr= args.probe_lr,
+        momentum = args.probe_momentum,
+        patience = args.probe_patience,
+        batch_size= args.probe_bs
     )
     logger.info(f"Linear probing acc: {linear_probe_acc}")
+
+    # write dict to csv file, naming model_name+seed+sample_size
+    csv_path = f"{output_path}{model_name}.csv"
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=list(log_dict[0].keys()))
+        writer.writeheader()
+        writer.writerows(log_dict)
+    logger.info(f"Saved linear probe log to {csv_path}")
 
     metrics_dict = {
         "classification/train_acc": train_acc,
