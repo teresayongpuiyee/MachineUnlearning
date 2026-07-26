@@ -165,7 +165,8 @@ def training_optimization(
         mean_loss = np.mean(np.array(loss_list))
         #train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
         test_metrics = metrics.evaluate_by_class(val_loader= test_loader, model= trained_model, device= device, unlearn_class=0)
-        test_loss = test_metrics['Loss']
+        unlearn_test_loss = test_metrics['UnlearnLoss']
+        retain_test_loss = test_metrics['RemainLoss']
         unlearn_test_acc = test_metrics['UnlearnAcc']
         retain_test_acc = test_metrics['RemainAcc']
 
@@ -176,7 +177,8 @@ def training_optimization(
             log_dict.append({
                 "epoch": epoch,
                 "train_loss": mean_loss,
-                "test_loss": test_loss,
+                "forget_test_loss": unlearn_test_loss,
+                "retain_test_loss": retain_test_loss,
                 "forget_acc": unlearn_acc,
                 "retain_acc": retain_acc,
                 "forget_test_acc": unlearn_test_acc,
