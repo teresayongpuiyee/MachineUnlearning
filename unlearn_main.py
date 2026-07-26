@@ -256,7 +256,7 @@ def main(args) -> None:
         test_unlearn_loader=test_unlearn_loader,
         model= unlearned_model,
         num_classes= num_classes,
-        epochs= args.probe_epochs,
+        epochs= args.probe_epoch,
         lr= args.probe_lr,
         momentum = args.probe_momentum,
         patience = args.probe_patience,
