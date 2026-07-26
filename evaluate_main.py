@@ -271,8 +271,8 @@ def main(args) -> None:
             }
 
         if "svcca" in args.metrics:
-            svcca_f_r = repr_metrics.svcca(forget_reps, forget_retrain_reps)
-            svcca_r_r = repr_metrics.svcca(retain_reps, retain_retrain_reps)
+            svcca_f_r, _ = repr_metrics.svcca(forget_reps, forget_retrain_reps)
+            svcca_r_r, _ = repr_metrics.svcca(retain_reps, retain_retrain_reps)
 
             svcca_metrics_dict = {
                 "forget_unlearn_retrain": svcca_f_r,
