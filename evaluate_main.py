@@ -36,7 +36,8 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               "cka_r",
                               "tsne",
                               "relearn_attack",
-                              "svcca"
+                              "svcca",
+                              "rand_proj"
                               ], 
                     help= "Metrics to evaluate")
 
@@ -119,6 +120,8 @@ def main(args) -> None:
     cka_o_metrics_dict = dict()
     shift_norm_dict = dict()
     svcca_metrics_dict = dict()
+    mia_sum = dict()
+    cka_f_sum = dict()
 
     # Evaluation after unlearning
     if "mia_logit" in args.metrics and len(args.project_method) == 0:
@@ -134,7 +137,6 @@ def main(args) -> None:
             train_labels=train_enp_labels,
             test_labels=test_enp_labels,
             unlearn_class=args.unlearn_class,
-            seed=args.seed
         )
         logger.info(f"POUR MIA: {pour_mia_asr}")
 
@@ -160,7 +162,10 @@ def main(args) -> None:
     if "mia_rep" in args.metrics or "tsne" in args.metrics:
         train_reps, train_labels = repr_metrics.get_representations(train_loader, unlearned_model)
         test_reps, test_labels = repr_metrics.get_representations(test_loader, unlearned_model)
-        
+
+        raw_train_reps = train_reps
+        raw_test_reps = test_reps
+
         if len(args.project_method) > 0:
             train_reps, train_shift_norm = analyse.project_representations(train_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
             test_reps, _ = analyse.project_representations(test_reps, ori_model, retrain_model, train_loader, device, projection=args.project_method)
@@ -202,7 +207,9 @@ def main(args) -> None:
     if "cka_o" in args.metrics or "cka_r" in args.metrics or "svcca" in args.metrics:
         retain_reps, _ = repr_metrics.get_representations(retain_loader, unlearned_model)
         forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
-        
+
+        raw_forget_reps = forget_reps
+
         if len(args.project_method) > 0:
             retain_reps, retain_shift_norm = analyse.project_representations(retain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
             forget_reps, forget_shift_norm = analyse.project_representations(forget_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)
@@ -253,6 +260,8 @@ def main(args) -> None:
         retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, retrain_model)
         forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, retrain_model)
 
+        raw_forget_retrain_reps = forget_retrain_reps
+
         if len(args.project_method) > 0:
             retain_retrain_reps, _ = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
             forget_retrain_reps, _ = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)   
@@ -299,6 +308,37 @@ def main(args) -> None:
             retain_per_forget=args.retain_per_forget
         )
 
+    if "rand_proj" in args.metrics and ("mia_rep" in args.metrics or "cka_r" in args.metrics) and len(args.project_method) > 0:
+        M = 500
+
+        mia_rep_proj = pour_rmia_asr
+        cka_f_r_proj = cka_f_r
+
+        null_cka_f, null_mia = [], []
+        for s in range(M):
+
+            train_random_reps, _ = analyse.project_representations(raw_train_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
+            test_random_reps, _ = analyse.project_representations(raw_test_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
+            
+            _, pour_rand_rmia_asr = repr_metrics.pour_rmia(
+                train_reps=train_random_reps,
+                test_reps=test_random_reps,
+                train_labels=train_labels,
+                test_labels=test_labels,
+                unlearn_class=args.unlearn_class,
+            )
+            null_mia.append(pour_rand_rmia_asr)
+
+            forget_rand_reps, _ = analyse.project_representations(raw_forget_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
+            forget_rand_retrain_reps, _ = analyse.project_representations(raw_forget_retrain_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)   
+
+            cka_f_r_rand = repr_metrics.linear_cka(forget_rand_reps, forget_rand_retrain_reps)
+
+            null_cka_f.append(cka_f_r_rand)
+
+        mia_sum = analyse.summarize_against_null(mia_rep_proj,  null_mia)
+        cka_f_sum = analyse.summarize_against_null(cka_f_r_proj,  null_cka_f)
+
     metrics_dict = {
         "classification": cls_metrics_dict,
         "representation": rep_metrics_dict,
@@ -306,6 +346,8 @@ def main(args) -> None:
         "cka_original": cka_o_metrics_dict,
         "svcca_retrain": svcca_metrics_dict,
         "shift_norm": shift_norm_dict,
+        "mia_sum": mia_sum,
+        "cka_f_sum": cka_f_sum
     }
 
     logger.info("Saving computed metrics...")

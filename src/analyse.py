@@ -203,25 +203,47 @@ def visualize_rep_shifts(mean_ori, mean_retrain, mean_unlearn, labels=None,
         print(f"Plot saved to {save_path}")
 
 def project_representations(
-    representations, ori_model, retrain_model, dataloader, device, projection=""
+    representations, ori_model, retrain_model, dataloader, device, projection="", random=False, seed=0
 ):
     target_device = representations.device  # should be cpu
 
-    model_dict = {
-        "original": ori_model,
-        "retrain": retrain_model,
-    }
-    mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
-    
-    # Move mean reps to CPU to match representations
-    mean_ori = mean_reps_dict["original"].to(target_device)
-    mean_retrain = mean_reps_dict["retrain"].to(target_device)
+    if not random:
+        model_dict = {
+            "original": ori_model,
+            "retrain": retrain_model,
+        }
+        mean_reps_dict = extract_mean_representation_from_n_models(model_dict, dataloader, device)
+        
+        # Move mean reps to CPU to match representations
+        mean_ori = mean_reps_dict["original"].to(target_device)
+        mean_retrain = mean_reps_dict["retrain"].to(target_device)
 
-    # Compute shift direction
-    shift_retrain = mean_retrain - mean_ori
-    shift_retrain_norm = torch.norm(shift_retrain)
-    
-    direction = shift_retrain / (shift_retrain_norm + 1e-8)  # Avoid division by zero (D,)
+        # Compute shift direction
+        shift_retrain = mean_retrain - mean_ori
+        shift_retrain_norm = torch.norm(shift_retrain)
+        
+        direction = shift_retrain / (shift_retrain_norm + 1e-8)  # Avoid division by zero (D,)
+
+        norm_out = shift_retrain_norm.item()
+    elif random:
+        # Random baseline direction, reproducible from `seed` alone (independent of
+        # how much global RNG earlier steps consumed). Using the SAME `seed` for
+        # projection="parallel" and projection="orthogonal" yields matched 1-D and
+        # (d-1)-D components from one direction; loop over seeds to build the null.
+        generator = torch.Generator(device=target_device).manual_seed(seed)
+ 
+        # Isotropic: uniform on the unit sphere in R^D.
+        rand_vec = torch.randn(
+            representations.shape[1], generator=generator,
+            dtype=representations.dtype, device=target_device,
+        )
+ 
+        direction = rand_vec / (torch.norm(rand_vec) + 1e-8)  # (D,)
+ 
+        # The second return value is the RETRAINING shift magnitude, which is
+        # undefined for a random direction. Return None so it can't be silently
+        # consumed as if it were a real shift norm.
+        norm_out = None
 
     # scalar projection onto direction
     scalar_proj = torch.matmul(representations, direction)  # (N,)
@@ -232,10 +254,41 @@ def project_representations(
     if "orthogonal" in projection:
         # Project representations orthogonally to the shift direction
         orthogonal = representations - parallel  # (N, D)
-        return orthogonal, shift_retrain_norm.item()
+        return orthogonal, norm_out
     elif "parallel" in projection:
         # Project representations parallel to the shift direction
-        return parallel, shift_retrain_norm.item()
+        return parallel, norm_out
     else:
         # Return original representations if neither orthogonal nor parallel projection is requested
-        return representations, shift_retrain_norm.item()
+        return representations, norm_out
+
+
+def summarize_against_null(observed, null_values):
+    """
+    Report the observed (retraining-direction) metric relative to the
+    random-direction null built from the seed loop.
+
+    Returns the null's 95% two-sided percentile band [p2.5, p97.5] for
+    presentation, plus add-one-corrected one-sided p-values. Report the
+    one-sided p that matches the pre-registered direction of the effect.
+    """
+    observed = float(observed)
+    null = torch.as_tensor(list(null_values), dtype=torch.float64)
+    n = null.numel()
+
+    q = torch.quantile(null, torch.tensor([0.025, 0.975], dtype=torch.float64))
+    p025, p975 = q[0].item(), q[1].item()
+
+    return {
+        "observed": observed,
+        "n_random": n,
+        "null_mean": null.mean().item(),
+        "null_std": null.std(unbiased=True).item(),
+        "null_p2.5": p025,
+        "null_p97.5": p975,
+        "percentile": (null < observed).double().mean().item() * 100.0,
+        # add-one corrected one-sided p-values (Phipson & Smyth, 2010):
+        "p_obs_greater_than_null": (1 + (null >= observed).sum().item()) / (1 + n),  # obs in UPPER tail
+        "p_obs_less_than_null":    (1 + (null <= observed).sum().item()) / (1 + n),  # obs in LOWER tail
+        "outside_95_band": (observed < p025) or (observed > p975),
+    }
