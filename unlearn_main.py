@@ -63,6 +63,8 @@ parser.add_argument("-probe_momentum", type=float, default= 0.0, help='Probe mom
 parser.add_argument("-probe_patience", type=int, default= 0, help='Probe early stop patience')
 parser.add_argument("-probe_bs", type=int, default= 128, help='Probe batch size')
 
+parser.add_argument("-logistic_probe", dest="logistic_probe", action="store_true", default= False, help= "logistic_probe_lbfgs")
+
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
 
@@ -223,67 +225,84 @@ def main(args) -> None:
             model_root=args.model_root,
         )
 
-    # Evaluation after unlearning
-    # Classification-level evaluation
-    logger.info(f"Unlearned classification")
-    train_acc = metrics.evaluate(val_loader=train_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Train acc: {train_acc}")
-    test_acc = metrics.evaluate(val_loader=test_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Test acc: {test_acc}")
-    retain_acc = metrics.evaluate(val_loader=retain_eval_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Retain acc: {retain_acc}")
-    unlearn_acc = metrics.evaluate(val_loader=unlearn_eval_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Unlearn_acc: {unlearn_acc}")
-    test_retain_acc = metrics.evaluate(val_loader=test_retain_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Test retain acc: {test_retain_acc}")
-    test_unlearn_acc = metrics.evaluate(val_loader=test_unlearn_loader, model=unlearned_model, device=device)['Acc']
-    logger.info(f"Test unlearn acc: {test_unlearn_acc}")
+    if not args.logistic_probe:
+        # Evaluation after unlearning
+        # Classification-level evaluation
+        logger.info(f"Unlearned classification")
+        train_acc = metrics.evaluate(val_loader=train_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Train acc: {train_acc}")
+        test_acc = metrics.evaluate(val_loader=test_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Test acc: {test_acc}")
+        retain_acc = metrics.evaluate(val_loader=retain_eval_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Retain acc: {retain_acc}")
+        unlearn_acc = metrics.evaluate(val_loader=unlearn_eval_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Unlearn_acc: {unlearn_acc}")
+        test_retain_acc = metrics.evaluate(val_loader=test_retain_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Test retain acc: {test_retain_acc}")
+        test_unlearn_acc = metrics.evaluate(val_loader=test_unlearn_loader, model=unlearned_model, device=device)['Acc']
+        logger.info(f"Test unlearn acc: {test_unlearn_acc}")
 
-    logger.info(f"Unlearned representation")
+        logger.info(f"Unlearned representation")
 
-    #bin_probe_acc = repr_metrics.binary_forget_probe(
-    #    retain_eval_loader=retain_eval_loader,
-    #    unlearn_eval_loader=unlearn_eval_loader,
-    #    unlearned_model=unlearned_model
-    #)
+        #bin_probe_acc = repr_metrics.binary_forget_probe(
+        #    retain_eval_loader=retain_eval_loader,
+        #    unlearn_eval_loader=unlearn_eval_loader,
+        #    unlearned_model=unlearned_model
+        #)
 
-    linear_probe_acc, log_dict = repr_metrics.linear_probing(
-        train_loader= train_aug_loader,
-        test_loader=test_loader,
-        retain_eval_loader= retain_eval_loader,
-        unlearn_eval_loader= unlearn_eval_loader,
-        test_retain_loader=test_retain_loader,
-        test_unlearn_loader=test_unlearn_loader,
-        model= unlearned_model,
-        num_classes= num_classes,
-        epochs= args.probe_epoch,
-        lr= args.probe_lr,
-        momentum = args.probe_momentum,
-        patience = args.probe_patience,
-        batch_size= args.probe_bs
-    )
-    logger.info(f"Linear probing acc: {linear_probe_acc}")
+        linear_probe_acc, log_dict = repr_metrics.linear_probing(
+            train_loader= train_aug_loader,
+            test_loader=test_loader,
+            retain_eval_loader= retain_eval_loader,
+            unlearn_eval_loader= unlearn_eval_loader,
+            test_retain_loader=test_retain_loader,
+            test_unlearn_loader=test_unlearn_loader,
+            model= unlearned_model,
+            num_classes= num_classes,
+            epochs= args.probe_epoch,
+            lr= args.probe_lr,
+            momentum = args.probe_momentum,
+            patience = args.probe_patience,
+            batch_size= args.probe_bs
+        )
+        logger.info(f"Linear probing acc: {linear_probe_acc}")
 
-    # write dict to csv file, naming model_name+seed+sample_size
-    csv_path = f"{output_path}{model_name}.csv"
-    with open(csv_path, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(log_dict[0].keys()))
-        writer.writeheader()
-        writer.writerows(log_dict)
-    logger.info(f"Saved linear probe log to {csv_path}")
+        # write dict to csv file, naming model_name+seed+sample_size
+        csv_path = f"{output_path}{model_name}.csv"
+        with open(csv_path, "w", newline="") as f:
+            writer = csv.DictWriter(f, fieldnames=list(log_dict[0].keys()))
+            writer.writeheader()
+            writer.writerows(log_dict)
+        logger.info(f"Saved linear probe log to {csv_path}")
 
-    metrics_dict = {
-        "classification/train_acc": train_acc,
-        "classification/test_acc": test_acc,
-        "classification/retain_acc": retain_acc,
-        "classification/unlearn_acc": unlearn_acc,
-        "classification/test_retain_acc": test_retain_acc,
-        "classification/test_unlearn_acc": test_unlearn_acc,
-        #"representation/binary_probe_acc": bin_probe_acc,
-        "representation/linear_probe_acc": linear_probe_acc,
-        "runtime_sec": runtime
-    }
+        metrics_dict = {
+            "classification/train_acc": train_acc,
+            "classification/test_acc": test_acc,
+            "classification/retain_acc": retain_acc,
+            "classification/unlearn_acc": unlearn_acc,
+            "classification/test_retain_acc": test_retain_acc,
+            "classification/test_unlearn_acc": test_unlearn_acc,
+            #"representation/binary_probe_acc": bin_probe_acc,
+            "representation/linear_probe_acc": linear_probe_acc,
+            "runtime_sec": runtime
+        }
 
+    elif args.logistic_probe:
+        logistic_probe_out = repr_metrics.logistic_probe_lbfgs(
+            train_loader= train_aug_loader,
+            retain_eval_loader= retain_eval_loader,
+            unlearn_eval_loader= unlearn_eval_loader,
+            model= unlearned_model,
+            test_retain_loader=test_retain_loader,
+            test_unlearn_loader=test_unlearn_loader,
+            n_aug_passes=5
+        )
+
+        metrics_dict = {
+            "logistic_probe_out": logistic_probe_out,
+        }
+
+    
     with open(OUTPUT_METRICS_FILE, 'w') as f:
         yaml.safe_dump(metrics_dict, f, default_flow_style=False, sort_keys=False)
 

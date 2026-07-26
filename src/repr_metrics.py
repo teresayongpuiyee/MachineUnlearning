@@ -440,19 +440,11 @@ def sure_miars(
 
     return metrics_dict, forget_asr
 
-def _seed_all(s: int) -> None:
-    random.seed(s)
-    np.random.seed(s)
-    torch.manual_seed(s)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(s)
- 
- 
+
 def _collect_features_np(
     loader: Optional[DataLoader],
     model: torch.nn.Module,
     n_passes: int = 1,
-    seed: Optional[int] = None,
 ) -> Optional[tuple]:
     """Stack features + labels over n_passes of `loader` via get_representations().
     Augmentation (if in the loader's transform) is resampled per pass -- passes
@@ -463,8 +455,6 @@ def _collect_features_np(
         return None
     Xs, ys = [], []
     for p in range(n_passes):
-        if seed is not None:
-            _seed_all(seed + p)
         X, y = get_representations(loader, model)   # torch tensors on CPU
         Xs.append(X.numpy())
         ys.append(y.numpy())
@@ -494,19 +484,18 @@ def logistic_probe_lbfgs(
     max_iter: int = 5000,
     fit_intercept: bool = True,
     n_aug_passes: int = 1,
-    seed: Optional[int] = None,     # leave None: your runner owns global seeding
     val_loader: Optional[DataLoader] = None,   # C selection only; disjoint from all report sets
     C_grid: Optional[Sequence[float]] = None,
 ) -> dict:
     """One L-BFGS probe fit on augmented train features; reports the four splits
     your SGD probe reports. Use ONE fixed C across all models."""
-    X_tr, y_tr = _collect_features_np(train_loader, model, n_passes=n_aug_passes, seed=seed)
+    X_tr, y_tr = _collect_features_np(train_loader, model, n_passes=n_aug_passes)
  
     scaler = StandardScaler().fit(X_tr)
     X_tr_s = scaler.transform(X_tr)
  
     if val_loader is not None and C_grid:
-        Xv, yv = _collect_features_np(val_loader, model, n_passes=1, seed=None)
+        Xv, yv = _collect_features_np(val_loader, model, n_passes=1)
         Xv_s = scaler.transform(Xv)
         best_C, best_acc = C, -1.0
         for c in C_grid:
@@ -522,7 +511,7 @@ def logistic_probe_lbfgs(
     converged = not any(issubclass(x.category, ConvergenceWarning) for x in w)
  
     def _acc(loader):
-        data = _collect_features_np(loader, model, n_passes=1, seed=None)  # clean, single pass
+        data = _collect_features_np(loader, model, n_passes=1)  # clean, single pass
         if data is None:
             return None
         X, y = data
@@ -539,7 +528,7 @@ def logistic_probe_lbfgs(
         "fit_intercept": fit_intercept, "C": C, "l2_lambda": 1.0 / C,
         "tol": tol, "max_iter": max_iter,
         # ---- protocol + convergence ----
-        "n_aug_passes": n_aug_passes, "seed": seed,
+        "n_aug_passes": n_aug_passes,
         "n_iter": n_iter, "converged": converged,
         "solver": "lbfgs", "multi_class": "multinomial",
     }
