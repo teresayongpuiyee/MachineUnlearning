@@ -672,7 +672,7 @@ def linear_probing(
 
     return {
         "best_epoch": best_epoch,
-    }
+    }, log_dict
 
 def binary_forget_probe(
     retain_eval_loader: DataLoader,   # representations of forget samples
