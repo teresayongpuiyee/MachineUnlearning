@@ -35,7 +35,8 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               "cka_o",
                               "cka_r",
                               "tsne",
-                              "relearn_attack"
+                              "relearn_attack",
+                              "svcca"
                               ], 
                     help= "Metrics to evaluate")
 
@@ -116,6 +117,7 @@ def main(args) -> None:
     cka_r_metrics_dict = dict()
     cka_o_metrics_dict = dict()
     shift_norm_dict = dict()
+    svcca_metrics_dict = dict()
 
     # Evaluation after unlearning
     if "mia_logit" in args.metrics and len(args.project_method) == 0:
@@ -143,7 +145,7 @@ def main(args) -> None:
         }
 
     # Representation-level evaluation
-    if ("cka_o" in args.metrics or "cka_r" in args.metrics or "mia_rep" in args.metrics) and len(args.project_method) > 0:
+    if ("cka_o" in args.metrics or "cka_r" in args.metrics or "svcca" in args.metrics or "mia_rep" in args.metrics) and len(args.project_method) > 0:
         model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
         ori_model_path = model_dir + "/baseline.pt"
@@ -196,7 +198,7 @@ def main(args) -> None:
         )
         logger.info("t-SNE visualization saved.")
 
-    if "cka_o" in args.metrics or "cka_r" in args.metrics:
+    if "cka_o" in args.metrics or "cka_r" in args.metrics or "svcca" in args.metrics:
         retain_reps, _ = repr_metrics.get_representations(retain_loader, unlearned_model)
         forget_reps, _ = repr_metrics.get_representations(unlearn_loader, unlearned_model)
         
@@ -238,7 +240,7 @@ def main(args) -> None:
             "rus_unlearn_original": rus_o,
         }
 
-    if "cka_r" in args.metrics:
+    if "cka_r" in args.metrics or "svcca" in args.metrics:
         logger.info(f"Representation similarity evaluation with retrained model...")
         if len(args.project_method) == 0:
             model_dir = "/".join(args.unlearned_model.split("/")[:-1])
@@ -254,18 +256,28 @@ def main(args) -> None:
             retain_retrain_reps, _ = analyse.project_representations(retain_retrain_reps, ori_model, retrain_model, retain_loader, device, projection=args.project_method)
             forget_retrain_reps, _ = analyse.project_representations(forget_retrain_reps, ori_model, retrain_model, unlearn_loader, device, projection=args.project_method)   
 
-        cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
-        cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
-        logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
+        if "cka_r" in args.metrics:
+            cka_f_r = repr_metrics.linear_cka(forget_reps, forget_retrain_reps)
+            cka_r_r = repr_metrics.linear_cka(retain_reps, retain_retrain_reps)
+            logger.info(f"CKA between unlearned and retrained model: forget={cka_f_r}, retain={cka_r_r}")
 
-        rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
-        logger.info(f"Representation Unlearning Score (RUS) with retrained model: {rus_r}")
+            rus_r = repr_metrics.representation_unlearning_score(cka_f_r, cka_r_r)
+            logger.info(f"Representation Unlearning Score (RUS) with retrained model: {rus_r}")
 
-        cka_r_metrics_dict = {
-            "forget_unlearn_retrain": cka_f_r,
-            "retain_unlearn_retrain": cka_r_r,
-            "rus_unlearn_retrain": rus_r,
-        }
+            cka_r_metrics_dict = {
+                "forget_unlearn_retrain": cka_f_r,
+                "retain_unlearn_retrain": cka_r_r,
+                "rus_unlearn_retrain": rus_r,
+            }
+
+        if "svcca" in args.metrics:
+            svcca_f_r = repr_metrics.svcca(forget_reps, forget_retrain_reps)
+            svcca_r_r = repr_metrics.svcca(retain_reps, retain_retrain_reps)
+
+            svcca_metrics_dict = {
+                "forget_unlearn_retrain": svcca_f_r,
+                "retain_unlearn_retrain": svcca_r_r,
+            }
 
     if "relearn_attack" in args.metrics:
         repr_metrics.relearning_attack(
@@ -290,6 +302,7 @@ def main(args) -> None:
         "representation": rep_metrics_dict,
         "cka_retrain": cka_r_metrics_dict,
         "cka_original": cka_o_metrics_dict,
+        "svcca_retrain": svcca_metrics_dict,
         "shift_norm": shift_norm_dict,
     }
 

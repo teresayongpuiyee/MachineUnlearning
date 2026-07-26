@@ -21,6 +21,7 @@ def extract_mean_representation_from_n_models(model_dict, dataloader, device):
 
         # Extract features for all three models
         for model_key, model in model_dict.items():
+            # TODO: flag all_layer and index layer of interest as h
             h = model.feature_extractor(x)
             if mean_dict[model_key] is None:
                 mean_dict[model_key] = torch.zeros(h.size(1), device=device)

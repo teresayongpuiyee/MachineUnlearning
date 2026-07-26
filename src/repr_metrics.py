@@ -55,6 +55,7 @@ def get_representations(
         for batch in tqdm(loader):
             batch = [tensor.to(next(model.parameters()).device, non_blocking=True) for tensor in batch]
             data, target = batch
+            # TODO: flag all_layer and index layer of interest as feat
             feat = model.feature_extractor(data)
             reps.append(feat.detach().cpu())
             all_labels.append(target.cpu())
@@ -709,6 +710,67 @@ def linear_cka(X, Y, eps=1e-8):
     cka = numerator / (denom + eps)
 
     return cka.item()
+
+
+def svcca(X, Y, var_threshold=0.99, epsilon=1e-10):
+    """
+    Compute the SVCCA similarity between two representations of shape (n, d).
+
+    Two stages:
+      1. SVD: reduce each representation to the top singular directions
+         retaining `var_threshold` of variance (strips low-variance noise dims).
+      2. CCA: find maximally-correlated linear projections of the two reduced
+         reps. The mean of the canonical correlations is the SVCCA score.
+
+    X : (n, d1), Y : (n, d2)  — same n examples, features as columns; d1 may != d2.
+    Returns (mean_correlation, canonical_correlations_sorted_desc).
+    """
+    X = np.asarray(X, np.float64); Y = np.asarray(Y, np.float64)
+    if X.shape[0] != Y.shape[0]:
+        raise ValueError("X and Y must share axis 0 (number of examples).")
+
+    # Center each feature across examples (required for CCA).
+    X = X - X.mean(0, keepdims=True)
+    Y = Y - Y.mean(0, keepdims=True)
+
+    Xr = _svd_reduce(X, var_threshold)
+    Yr = _svd_reduce(Y, var_threshold)
+    corrs = _cca_correlations(Xr, Yr, epsilon)
+    return float(corrs.mean()), corrs
+
+
+def _svd_reduce(A, var_threshold):
+    """Project centered A (n,d) onto top PCs retaining var_threshold of variance."""
+    U, s, _ = np.linalg.svd(A, full_matrices=False)
+    if var_threshold is None or var_threshold >= 1.0:
+        k = len(s)
+    else:
+        var = s ** 2; total = var.sum()
+        if total <= 0:
+            return np.zeros((A.shape[0], 1))
+        k = int(np.searchsorted(np.cumsum(var) / total, var_threshold) + 1)
+        k = max(1, min(k, len(s)))
+    return U[:, :k] * s[:k]   # scores in retained PC basis == A @ V_k
+
+
+def _cca_correlations(X, Y, epsilon=1e-10):
+    """Canonical correlations via whitening: singular values of the
+    whitened cross-covariance are exactly the canonical correlations."""
+    n = X.shape[0]
+    Sxx, Syy, Sxy = (X.T @ X)/n, (Y.T @ Y)/n, (X.T @ Y)/n
+    T = _inv_sqrt_psd(Sxx, epsilon) @ Sxy @ _inv_sqrt_psd(Syy, epsilon)
+    return np.clip(np.linalg.svd(T, compute_uv=False), 0.0, 1.0)
+
+
+def _inv_sqrt_psd(M, epsilon):
+    """Inverse symmetric sqrt of a PSD matrix; drops eigenvalues < epsilon
+    so it stays stable when M is rank-deficient (common after SVD truncation)."""
+    M = (M + M.T) / 2.0
+    vals, vecs = np.linalg.eigh(M)
+    keep = vals > epsilon
+    vals, vecs = vals[keep], vecs[:, keep]
+    return vecs @ np.diag(1.0 / np.sqrt(vals)) @ vecs.T
+
 
 def representation_unlearning_score(cka_f, cka_r, original=False):
     # Compute harmonic mean between cka_f and cka_r
