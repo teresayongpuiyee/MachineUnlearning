@@ -7,6 +7,7 @@ from torch.utils.data import DataLoader
 import yaml
 import copy
 import re
+import csv
 
 parser = argparse.ArgumentParser()
 # Device
@@ -335,6 +336,14 @@ def main(args) -> None:
             cka_f_r_rand = repr_metrics.linear_cka(forget_rand_reps, forget_rand_retrain_reps)
 
             null_cka_f.append(cka_f_r_rand)
+
+        # write null_cka_f, null_mia to csv file
+        csv_path = f"{output_path}{unlearn_method}_random.csv"
+        with open(csv_path, 'w', newline='') as f:
+            writer = csv.writer(f)
+            writer.writerow(["null_cka_f", "null_mia"])
+            writer.writerows(zip(null_cka_f, null_mia))
+        logger.info(f"Saved null distributions to {csv_path}")
 
         mia_sum = analyse.summarize_against_null(mia_rep_proj,  null_mia)
         cka_f_sum = analyse.summarize_against_null(cka_f_r_proj,  null_cka_f)
