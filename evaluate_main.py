@@ -26,6 +26,8 @@ parser.add_argument("-pretrained_timm", dest="pretrained_timm", action="store_tr
 parser.add_argument("-model", type= str, default= "ResNet18", help= "Model selection")
 parser.add_argument("-unlearned_model", type=str, required=True, help="Path to unlearned model")
 parser.add_argument("-retrain_model_name", type= str, default= "retrain", help= "Retrain model name")
+parser.add_argument("-ori_model_name", type= str, default= "baseline", help= "Original model name")
+
 # Unlearn configuration
 parser.add_argument("-unlearn_class", type= int, help= "Class to unlearn")
 parser.add_argument("-project_method", type= str, default= "", help= "Projection method for representation alignment",
@@ -70,9 +72,9 @@ def main(args) -> None:
         output_path = f"./{exp_name}/{args.unlearn_class}/evaluate_outputs/"
     utils.create_directory_if_not_exists(output_path)
     
-    logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}.log")
-    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}_config.yaml"
-    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_{args.retrain_model_name}_metrics.yaml"
+    logger = utils.configure_logger(f"{output_path}unlearn_{unlearn_method}_{args.ori_model_name}_{args.retrain_model_name}.log")
+    OUTPUT_CONFIG_FILE = f"{output_path}unlearn_{unlearn_method}_{args.ori_model_name}_{args.retrain_model_name}_config.yaml"
+    OUTPUT_METRICS_FILE = f"{output_path}unlearn_{unlearn_method}_{args.ori_model_name}_{args.retrain_model_name}_metrics.yaml"
     
     config_dict = vars(args).copy()
     with open(OUTPUT_CONFIG_FILE, 'w') as f:
@@ -154,7 +156,7 @@ def main(args) -> None:
     if ("cka_o" in args.metrics or "cka_r" in args.metrics or "svcca" in args.metrics or "mia_rep" in args.metrics) and len(args.project_method) > 0:
         model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
-        ori_model_path = model_dir + "/baseline.pt"
+        ori_model_path = model_dir + f"/{args.ori_model_name}.pt"
         ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
         utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
         
@@ -227,7 +229,7 @@ def main(args) -> None:
         
         if len(args.project_method) == 0:
             model_dir = "/".join(args.unlearned_model.split("/")[:-1])
-            ori_model_path = model_dir + "/baseline.pt"
+            ori_model_path = model_dir + f"/{args.ori_model_name}.pt"
             ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
             utils.load_model_weights(model=ori_model, model_path=ori_model_path,device=device)
 
@@ -253,15 +255,15 @@ def main(args) -> None:
 
     if "cka_r" in args.metrics or "svcca" in args.metrics:
         logger.info(f"Representation similarity evaluation with retrained model...")
-        if len(args.project_method) == 0:
-            model_dir = "/".join(args.unlearned_model.split("/")[:-1])
+        #if len(args.project_method) == 0:
+        model_dir = "/".join(args.unlearned_model.split("/")[:-1])
 
-            retrain_model_path = model_dir + f"/{args.retrain_model_name}.pt"
-            retrain_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
-            utils.load_model_weights(model=retrain_model, model_path=retrain_model_path,device=device)
+        reference_model_path = model_dir + "/retrain.pt"
+        reference_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
+        utils.load_model_weights(model=reference_model, model_path=reference_model_path,device=device)
 
-        retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, retrain_model)
-        forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, retrain_model)
+        retain_retrain_reps, _ = repr_metrics.get_representations(retain_loader, reference_model)
+        forget_retrain_reps, _ = repr_metrics.get_representations(unlearn_loader, reference_model)
 
         raw_forget_retrain_reps = forget_retrain_reps
 
