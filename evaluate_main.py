@@ -42,6 +42,7 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               ], 
                     help= "Metrics to evaluate")
 parser.add_argument("-random_direction", dest="random_direction", action="store_true", default=False, help="Random direction projection")
+parser.add_argument("-num_rand", type= int, default= 50, help= "Number of random directions")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
@@ -311,7 +312,7 @@ def main(args) -> None:
         )
 
     if "rand_proj" in args.metrics and ("mia_rep" in args.metrics or "cka_r" in args.metrics) and len(args.project_method) > 0:
-        M = 500
+        M = args.num_rand
 
         mia_rep_proj = pour_rmia_asr
         cka_f_r_proj = cka_f_r
