@@ -64,6 +64,7 @@ parser.add_argument("-probe_patience", type=int, default= 0, help='Probe early s
 parser.add_argument("-probe_bs", type=int, default= 128, help='Probe batch size')
 
 parser.add_argument("-logistic_probe", dest="logistic_probe", action="store_true", default= False, help= "logistic_probe_lbfgs")
+parser.add_argument("-n_aug_passes", type=int, default= 1, help='Number of aug pass')
 
 # Set seed
 parser.add_argument("-seed", type=int,default= 0, help="Seed for runs")
@@ -295,7 +296,7 @@ def main(args) -> None:
             model= unlearned_model,
             test_retain_loader=test_retain_loader,
             test_unlearn_loader=test_unlearn_loader,
-            n_aug_passes=5
+            n_aug_passes=args.n_aug_passes
         )
 
         metrics_dict = {
