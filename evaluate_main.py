@@ -41,6 +41,7 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               "rand_proj"
                               ], 
                     help= "Metrics to evaluate")
+parser.add_argument("-random_direction", dest="random_direction", action="store_true", default=False, help="Random direction projection")
 
 # Training hyperparameter
 parser.add_argument("-batch_size", type= int, default= 128, help= "Training batch size")
