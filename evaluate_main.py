@@ -320,7 +320,7 @@ def main(args) -> None:
         cka_f_r_proj = cka_f_r
 
         null_cka_f, null_mia = [], []
-        for s in range(M):
+        for s in range(10, M):
 
             train_random_reps, _ = analyse.project_representations(raw_train_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
             test_random_reps, _ = analyse.project_representations(raw_test_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
