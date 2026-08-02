@@ -3,11 +3,12 @@ import argparse
 from src import dataset, metrics, repr_metrics
 from model import models
 from torch.utils.data import DataLoader
-from unlearn_strategies import strategies
+from unlearn_strategies import strategies, unlearn
 import time
 import yaml
 import torch
 import csv
+import copy
 
 parser = argparse.ArgumentParser()
 # Device
@@ -116,7 +117,13 @@ def main(args) -> None:
         num_classes=num_classes, input_channels=num_channels, pretrained=args.pretrained_timm).to(device)
     if args.pretrained_timm:
         logger.info("Using pretrained model from timm...")
-    
+
+    if "pour_p" in args.model_path.split("/")[-1]:
+        model = unlearn.POUR_P(
+            copy.deepcopy(model), 
+            args.unlearn_class
+        ).to(device)
+
     # Dataset
     train_aug_dataset, test_dataset = dataset.get_dataset(
         dataset_name=args.dataset, root=args.root, model=model, pretrained_timm= args.pretrained_timm
