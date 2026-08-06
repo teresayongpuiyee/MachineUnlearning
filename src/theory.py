@@ -713,3 +713,209 @@ def save_residual_csv(result, retrain_name, csv_path):
     df.to_csv(csv_path, mode="a" if file_exists else "w",
               header=not file_exists, index=False)
     return csv_path
+
+
+def _to_tensor(x, dtype, device):
+    """numpy array or torch tensor -> detached tensor on (device, dtype)."""
+    if isinstance(x, torch.Tensor):
+        return x.detach().to(device=device, dtype=dtype)
+    return torch.as_tensor(x, dtype=dtype, device=device)
+
+
+def _to_long(x, device):
+    if isinstance(x, torch.Tensor):
+        return x.detach().to(device=device, dtype=torch.long).ravel()
+    return torch.as_tensor(x, dtype=torch.long, device=device).ravel()
+
+
+def _unit(V, eps=1e-12):
+    return V / V.norm(dim=1, keepdim=True).clamp_min(eps)
+
+
+@torch.no_grad()
+def retain_gradient_alignment(
+    H_feats,          # (N_r, d) retain features at theta_o
+    W,                # (C, d) final FC weight, logits = W @ h + b
+    b,                # (C,) final FC bias
+    y_labels,         # (N_r,) integer retain labels  <-- REQUIRED
+    eigvecs,          # (d, d) centered eigenvectors, columns, descending (Task C)
+    dhs,              # (K, d) forget-set mean-shift vectors, or list of (d,)
+    n_eig=20,
+    n_random=20,
+    seed=0,
+    normalize_dirs=True,
+):
+    """
+    Torch-native version. Same quantities as the numpy implementation:
+
+        g_x      = W^T (p_x - y_x),   p_x = softmax(W h_x + b)
+        g(v)     = mean_x [ v^T g_x ]                net force (signed)
+        g_rms(v) = sqrt( mean_x [ (v^T g_x)^2 ] )    per-sample magnitude
+        c(v)     = mean_x Var_{p_x}(W v)             GN curvature (optional)
+
+    DTYPE: to compare g / g_rms / c(v) against your existing torch curvature
+    values, both must be computed in the SAME dtype. Default float64 keeps the
+    mean gradient gbar accurate (small per-sample residuals accumulate). If your
+    prior c(u) was computed in float32, either recompute it in float64 or pass
+    dtype=torch.float32 here -- otherwise the two disagree at ~1e-6 relative,
+    which is dtype noise, not a real difference.
+
+    Returns a dict of torch tensors on `device`:
+        {'shift': {'g','g_rms'[,'curv']}, 'eig': {...}, 'random': {...},
+         'gbar_norm': float}
+    Move to numpy for plotting with .cpu().numpy().
+    """
+    device = eigvecs.device
+    dtype = eigvecs.dtype
+
+    H = _to_tensor(H_feats, dtype, device)        # (N_r, d)
+    W = _to_tensor(W, dtype, device)              # (C, d)
+    b = _to_tensor(b, dtype, device)              # (C,)
+    E = _to_tensor(eigvecs, dtype, device)        # (d, d)
+    y = _to_long(y_labels, device)                # (N_r,)
+
+    N_r, d = H.shape
+    C = W.shape[0]
+    assert W.shape[1] == d, f"W is {tuple(W.shape)}, expected (C, {d})"
+    assert b.shape[0] == C, f"b is {tuple(b.shape)}, expected ({C},)"
+    assert y.shape[0] == N_r, "need one retain label per retain feature row"
+    assert E.shape[0] == d, f"eigvecs rows {E.shape[0]} != d={d} (columns=vectors)"
+
+    # ---- direction sets --------------------------------------------------
+    if isinstance(dhs, (list, tuple)):
+        D = torch.stack([_to_tensor(v, dtype, device).ravel() for v in dhs], 0)
+    else:
+        D = _to_tensor(dhs, dtype, device)
+    if D.ndim == 1:
+        D = D[None, :]
+    assert D.shape[1] == d, f"dhs vectors have dim {D.shape[1]} != d={d}"
+
+    Veig = E[:, :n_eig].T          # (n_eig, d) rows = vectors
+
+    gen = torch.Generator(device=device).manual_seed(seed)
+    Vrand = torch.randn(n_random, d, generator=gen, dtype=dtype, device=device)
+
+    if normalize_dirs:
+        D, Veig, Vrand = _unit(D), _unit(Veig), _unit(Vrand)
+
+    # ---- softmax of ORIGINAL model on retain -----------------------------
+    Z = H @ W.T + b                              # (N_r, C)
+    P = torch.softmax(Z, dim=1)                    # stable internally
+
+    # g_x = W^T (p_x - y_x)  =>  G = P @ W - W[y]  (no residual matrix / copy)
+    G = P @ W - W[y]                               # (N_r, d)
+
+    def _stats(V):                                 # V: (M, d) directions
+        Proj = G @ V.T                          # (N_r, M) = v^T g_x
+        out = {
+            "g":     Proj.mean(0),                 # (M,)
+            "g_rms": Proj.pow(2).mean(0).sqrt(),
+        }
+        return out
+
+    return {
+        "shift":  _stats(D),
+        "eig":    _stats(Veig),
+        "random": _stats(Vrand),
+        "gbar_norm": G.mean(0).norm().item(),
+    }
+
+
+FORCE_C = "#2b6cb0"   # g / g_rms  (LEFT axis)
+CURV_C  = "#c05621"   # c(u)       (RIGHT axis)
+SHIFT_C = "#276749"   # forget-shift horizontal reference (force)
+
+
+def _np(x):
+    return x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
+
+
+def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
+    """
+    One figure for a single forget-shift direction against one background group.
+
+    group      : 'eig' or 'random'  -- the 20 directions forming the background
+    shift_idx  : which forget-shift direction (0..K-1) to draw as ref lines
+
+    Left subplot : g(v)     [left y] overlaid with c(u) [right y]
+    Right subplot: g_rms(v) [left y] overlaid with c(u) [right y]
+    The chosen forget-shift direction is drawn as a horizontal line on the LEFT
+    (force) axis of each subplot -- its g on the left subplot, its g_rms on the
+    right. Curvature is only shown for the background group, not for the shift
+    direction.
+    """
+    assert group in ("eig", "random")
+
+    g_bg   = _np(res[group]["g"])
+    grm_bg = _np(res[group]["g_rms"])
+    c_bg   = _np(res[group]["curv"])
+    M = len(g_bg)
+    x = np.arange(1, M + 1)
+
+    s_g   = float(_np(res["shift"]["g"])[shift_idx])
+    s_grm = float(_np(res["shift"]["g_rms"])[shift_idx])
+
+    # eig has a meaningful rank order -> connect; random order is arbitrary -> markers only
+    connect = (group == "eig")
+    line_kw = dict(marker="o", ms=4, lw=(1.4 if connect else 0), ls=("-" if connect else "None"))
+    xlabel = "eigenvector rank" if group == "eig" else "random direction index (arbitrary order)"
+
+    if ax_pair is None:
+        fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5))
+    else:
+        (axL, axR) = ax_pair
+        fig = axL.figure
+
+    def _panel(ax, force_bg, force_val, force_label):
+        # LEFT axis: force metric (background spectrum + shift ref line)
+        l1, = ax.plot(x, force_bg, color=FORCE_C, **line_kw,
+                      label=f"{group}  {force_label}")
+        lshift = ax.axhline(force_val, color=SHIFT_C, ls="--", lw=1.8,
+                            label=f"shift[{shift_idx}] {force_label}={force_val:.3g}")
+        ax.set_xlabel(xlabel)
+        ax.set_ylabel(force_label, color=FORCE_C)
+        ax.tick_params(axis="y", labelcolor=FORCE_C)
+        ax.axhline(0, color="0.6", lw=0.6, ls=":", zorder=0)
+        ax.grid(True, axis="x", alpha=0.15)
+
+        # RIGHT axis: curvature of the background group only
+        ax2 = ax.twinx()
+        l2, = ax2.plot(x, c_bg, color=CURV_C, marker="s", ms=3.5,
+                       lw=(1.4 if connect else 0), ls=("-" if connect else "None"),
+                       alpha=0.9, label=f"{group}  c(u)")
+        ax2.set_ylabel("c(u)", color=CURV_C)
+        ax2.tick_params(axis="y", labelcolor=CURV_C)
+        if curv_log:
+            ax2.set_yscale("log")
+        ax.legend(handles=[l1, lshift, l2], fontsize=8, frameon=False, loc="best")
+        return ax2
+
+    _panel(axL, g_bg,   s_g,   "g(v)")
+    _panel(axR, grm_bg, s_grm, "g_rms(v)")
+    axL.set_title(f"(left) g(v) & c(u)  —  {group} vs forget-shift #{shift_idx}")
+    axR.set_title(f"(right) g_rms(v) & c(u)  —  {group} vs forget-shift #{shift_idx}")
+    fig.tight_layout()
+    return fig
+
+
+def plot_all_shift_vs_spectrum(res, savedir=None, curv_log=False, close=True):
+    """
+    Generate all 2*K figures: for each forget-shift direction j, one figure
+    against the eig spectrum and one against the random spectrum.
+    Returns list of (group, shift_idx, path-or-None).
+    """
+    K = len(_np(res["shift"]["g"]))
+    if savedir:
+        os.makedirs(savedir, exist_ok=True)
+    out = []
+    for group in ("eig", "random"):
+        for j in range(K):
+            fig = plot_shift_vs_spectrum(res, group, j, curv_log=curv_log)
+            path = None
+            if savedir:
+                path = os.path.join(savedir, f"{group}_shift{j:02d}.png")
+                fig.savefig(path, dpi=300, bbox_inches="tight")
+            if close:
+                plt.close(fig)
+            out.append((group, j, path))
+    return out

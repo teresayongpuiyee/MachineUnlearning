@@ -26,6 +26,7 @@ parser.add_argument("-model_dir", type=str, required=True, help="Path to models 
 parser.add_argument("-exps", type= str, nargs='+', 
                     default= ["concentration", 
                               "finetune",
+                              "gradient"
                               ], 
                     help= "Experiments to evaluate")
 parser.add_argument("-finetune_mode", type= str, default= "eval", help= "Mode for finetuning: eval or train")
@@ -87,40 +88,10 @@ def main(args) -> None:
     ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     utils.load_model_weights(ori_model, ori_model_path, device)
 
-    if "concentration" in args.exps:
+    if "gradient" in args.exps or "concentration" in args.exps:
         logger.info("Computing concentration basis...")
-        H_r, _ = repr_metrics.get_representations(retain_loader, ori_model)   # (N_r, 512) at theta_o
+        H_r, y_r = repr_metrics.get_representations(retain_loader, ori_model)   # (N_r, 512) at theta_o
         B = theory.concentration_basis(H_r)
-
-        # spectra agree off the top: compare from rank 1 onward
-        c, u = B["centered"]["eigvals"], B["uncentered"]["eigvals"]
-        logger.info(f"top eigval  centered/uncentered: {c[0].item()} {u[0].item()}")
-        logger.info(
-            f"tail rel-diff (rank>=1): "
-            f"{(c[1:] - u[1:]).abs().div(u[1:].clamp_min(1e-12)).max().item()}")
-
-        # the mean should load almost entirely on the uncentered top eigenvector
-        v1_u = B["uncentered"]["eigvecs"][:, 0]
-        mean_hat = B["mean"] / B["mean"].norm()
-        logger.info(f"cos(h_bar, v1_uncentered): {torch.dot(mean_hat, v1_u).abs().item()}")
-
-        logger.info(f"centered   dust rel_neg: {B['centered']['neg_diag']['rel_neg']}")
-        logger.info(f"uncentered dust rel_neg: {B['uncentered']['neg_diag']['rel_neg']}")
-
-        # 1. WHERE is the mismatch? (predict: rank 1-3, decaying toward the deep tail)
-        reldiff = (c[1:] - u[1:]).abs() / u[1:].clamp_min(1e-12)
-        k = int(reldiff.argmax()) + 1
-        print(f"max tail rel-diff {reldiff.max():.3f} at rank {k}")
-        for r in range(12):
-            print(f"  rank {r:>2}: c {c[r]:8.4f}  u {u[r]:8.4f}  rel {(abs(c[r]-u[r])/max(u[r].item(),1e-12)):.4f}")
-
-        # 2. interlacing test: does c[k] match u[k+1]? (shift-by-one)
-        shift1 = (c[:-1] - u[1:]).abs() / u[1:].clamp_min(1e-12)
-        print("max rel-diff  c[k] vs u[k+1] (shift-by-one):", shift1.max().item())
-
-        # 3. mean magnitude consistency: ||h_bar||^2 should equal trace(M) - trace(C)
-        print("||h_bar||^2       =", B["mean"].pow(2).sum().item())
-        print("trace(M)-trace(C) =", (u.sum() - c.sum()).item())
 
         logger.info("Loading retrained model checkpoints...")
         retrain0_model_path = f"{args.model_dir}/retrain0.pt"
@@ -180,8 +151,57 @@ def main(args) -> None:
             shift_retrain = mean_retrain - mean_ori
             dhs.append(shift_retrain)
 
+        W = ori_model.fc.weight.detach().cpu()   # (C, d)
+        b = ori_model.fc.bias.detach().cpu()     # (C,)
+
+        print(f"ori_model.fc.weight shape: {W.shape}")
+        print(f"ori_model.fc.bias shape: {b.shape}")
+
+        assert W.shape[0] == num_classes and W.shape[1] == H_r.shape[1]
+
+        logits_r, _ = repr_metrics.get_logits(retain_loader, ori_model)
+        logits_manual = H_r @ W.T + b
+
+        diff = (logits_r - logits_manual).abs()
+        print("max abs diff :", diff.max().item())
+        print("mean abs diff:", diff.mean().item())
+        print("allclose     :", torch.allclose(logits_r, logits_manual, atol=1e-4, rtol=1e-4))
+
+        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"])
+
+    if "concentration" in args.exps:
+        # spectra agree off the top: compare from rank 1 onward
+        c, u = B["centered"]["eigvals"], B["uncentered"]["eigvals"]
+        logger.info(f"top eigval  centered/uncentered: {c[0].item()} {u[0].item()}")
+        logger.info(
+            f"tail rel-diff (rank>=1): "
+            f"{(c[1:] - u[1:]).abs().div(u[1:].clamp_min(1e-12)).max().item()}")
+
+        # the mean should load almost entirely on the uncentered top eigenvector
+        v1_u = B["uncentered"]["eigvecs"][:, 0]
+        mean_hat = B["mean"] / B["mean"].norm()
+        logger.info(f"cos(h_bar, v1_uncentered): {torch.dot(mean_hat, v1_u).abs().item()}")
+
+        logger.info(f"centered   dust rel_neg: {B['centered']['neg_diag']['rel_neg']}")
+        logger.info(f"uncentered dust rel_neg: {B['uncentered']['neg_diag']['rel_neg']}")
+
+        # 1. WHERE is the mismatch? (predict: rank 1-3, decaying toward the deep tail)
+        reldiff = (c[1:] - u[1:]).abs() / u[1:].clamp_min(1e-12)
+        k = int(reldiff.argmax()) + 1
+        print(f"max tail rel-diff {reldiff.max():.3f} at rank {k}")
+        for r in range(12):
+            print(f"  rank {r:>2}: c {c[r]:8.4f}  u {u[r]:8.4f}  rel {(abs(c[r]-u[r])/max(u[r].item(),1e-12)):.4f}")
+
+        # 2. interlacing test: does c[k] match u[k+1]? (shift-by-one)
+        shift1 = (c[:-1] - u[1:]).abs() / u[1:].clamp_min(1e-12)
+        print("max rel-diff  c[k] vs u[k+1] (shift-by-one):", shift1.max().item())
+
+        # 3. mean magnitude consistency: ||h_bar||^2 should equal trace(M) - trace(C)
+        print("||h_bar||^2       =", B["mean"].pow(2).sum().item())
+        print("trace(M)-trace(C) =", (u.sum() - c.sum()).item())
+
         logger.info("Computing concentration curves...")
-        
+        ## code for curvature overlay
         # dhs: (10, 512) forget-set mean-shift vectors; B from concentration_basis(H_r)
         c_evec = B["centered"]["eigvecs"]                   # (512, 512), columns, descending
         c_curves = theory.concentration_curves(dhs, c_evec, n_random=1, seed=0)
@@ -234,7 +254,7 @@ def main(args) -> None:
         contrib = theory.settle_it(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"])
         contrib = theory.settle_it(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"])
         """
-
+        ## actual concentration code
         #c_all_rows = theory.full_concentration_report(dhs, B["centered"]["eigvals"], B["centered"]["eigvecs"], f"{output_path}centered")
         #u_all_rows = theory.full_concentration_report(dhs, B["uncentered"]["eigvals"], B["uncentered"]["eigvecs"], f"{output_path}uncentered")
 
@@ -257,24 +277,6 @@ def main(args) -> None:
         tail = x > 0.74
         print("mean gap in tail (var>0.74):", gap[tail].mean().item(),
             " -> negative means tail is DEPLETED vs random")
-        
-        W = ori_model.fc.weight.detach().cpu()   # (C, d)
-        b = ori_model.fc.bias.detach().cpu()     # (C,)
-
-        print(f"ori_model.fc.weight shape: {W.shape}")
-        print(f"ori_model.fc.bias shape: {b.shape}")
-
-        assert W.shape[0] == num_classes and W.shape[1] == H_r.shape[1]
-
-        logits_r, _ = repr_metrics.get_logits(retain_loader, ori_model)
-        logits_manual = H_r @ W.T + b
-
-        diff = (logits_r - logits_manual).abs()
-        print("max abs diff :", diff.max().item())
-        print("mean abs diff:", diff.mean().item())
-        print("allclose     :", torch.allclose(logits_r, logits_manual, atol=1e-4, rtol=1e-4))
-
-        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"])
 
         theory.overlay_feature_loss_curvature(c_curves, curv,
                                               out_dir=f"{output_path}loss_curvature/centered")
@@ -333,7 +335,22 @@ def main(args) -> None:
         # or single retrain (appends if the file exists):
         theory.save_residual_csv(results, retrain_name=args.retrain_model_name,
                           csv_path=f"{output_path}fine_tune_on_retain/run_{args.finetune_mode}/residuals.csv")
-    
+
+    if "gradient" in args.exps:
+        res = theory.retain_gradient_alignment(
+            H_r,          # (N_r, d) retain features at theta_o
+            W,                # (C, d) final FC weight, logits = W @ h + b
+            b,                # (C,) final FC bias
+            y_r,         # (N_r,) integer retain labels  <-- REQUIRED
+            B["centered"]["eigvecs"],          # (d, d) centered eigenvectors, columns, descending (Task C)
+            dhs,              # (K, d) forget-set mean-shift vectors, or list of (d,)
+        )
+
+        res["eig"]["curv"] = curv["c_eig"]
+        res["random"]["curv"] = curv["c_rand"]
+
+        theory.plot_all_shift_vs_spectrum(res, savedir=f"{output_path}gradient_curvature/centered")
+
     metrics_dict = {}
 
     logger.info("Saving computed metrics...")
