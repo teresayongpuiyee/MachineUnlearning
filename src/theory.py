@@ -855,10 +855,8 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
     s_g   = float(_np(res["shift"]["g"])[shift_idx])
     s_grm = float(_np(res["shift"]["g_rms"])[shift_idx])
 
-    # eig has a meaningful rank order -> connect; random order is arbitrary -> markers only
-    connect = (group == "eig")
-    line_kw = dict(marker="o", ms=4, lw=(1.4 if connect else 0), ls=("-" if connect else "None"))
-    xlabel = "eigenvector rank" if group == "eig" else "random direction index (arbitrary order)"
+    line_kw = dict(marker="o", ms=4, lw=1.4, ls="-")
+    xlabel = "rank (0 = highest variance)" if group == "eig" else "random direction index"
 
     if ax_pair is None:
         fig, (axL, axR) = plt.subplots(1, 2, figsize=(14, 5))
@@ -881,7 +879,7 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
         # RIGHT axis: curvature of the background group only
         ax2 = ax.twinx()
         l2, = ax2.plot(x, c_bg, color=CURV_C, marker="s", ms=3.5,
-                       lw=(1.4 if connect else 0), ls=("-" if connect else "None"),
+                       lw=1.4, ls="-",
                        alpha=0.9, label=f"{group}  c(u)")
         ax2.set_ylabel("c(u)", color=CURV_C)
         ax2.tick_params(axis="y", labelcolor=CURV_C)
@@ -892,8 +890,8 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
 
     _panel(axL, g_bg,   s_g,   "g(v)")
     _panel(axR, grm_bg, s_grm, "g_rms(v)")
-    axL.set_title(f"(left) g(v) & c(u)  —  {group} vs forget-shift #{shift_idx}")
-    axR.set_title(f"(right) g_rms(v) & c(u)  —  {group} vs forget-shift #{shift_idx}")
+    axL.set_title(f"g(v) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
+    axR.set_title(f"g_rms(v) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
     fig.tight_layout()
     return fig
 
