@@ -167,7 +167,7 @@ def main(args) -> None:
         print("mean abs diff:", diff.mean().item())
         print("allclose     :", torch.allclose(logits_r, logits_manual, atol=1e-4, rtol=1e-4))
 
-        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"])
+        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"], dhs=dhs)
 
     if "concentration" in args.exps:
         # spectra agree off the top: compare from rank 1 onward
@@ -348,6 +348,7 @@ def main(args) -> None:
 
         res["eig"]["curv"] = curv["c_eig"]
         res["random"]["curv"] = curv["c_rand"]
+        res["shift"]["curv"] = curv["c_shift"]
 
         theory.plot_all_shift_vs_spectrum(res, savedir=f"{output_path}gradient_curvature/centered")
 

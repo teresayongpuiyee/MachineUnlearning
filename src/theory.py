@@ -382,7 +382,7 @@ def full_concentration_report(dhs, eigvals, eigvecs,
 
 
 @torch.no_grad()
-def feature_loss_curvature(H_feats, W, b, eigvecs, n_random=20, seed=0):
+def feature_loss_curvature(H_feats, W, b, eigvecs, dhs=None, n_random=20, seed=0):
     """
     H_feats : (N_r, d) retain features at theta_o (float64).
     W       : (C, d) final FC weight (logits = W @ h + b), from ORIGINAL model.
@@ -422,7 +422,25 @@ def feature_loss_curvature(H_feats, W, b, eigvecs, n_random=20, seed=0):
     R = torch.randn(n_random, d, generator=g, dtype=dtype).to(device)
     c_rand = curv(R)
 
-    return {"ranks": ranks, "c_eig": c_eig, "c_rand": c_rand, "G": G}
+    out = {"ranks": ranks, "c_eig": c_eig, "c_rand": c_rand, "G": G}
+
+    # forget-shift directions (optional)
+    if dhs is not None:
+        if isinstance(dhs, (list, tuple)):
+            D = torch.stack([
+                (v.detach() if isinstance(v, torch.Tensor) else torch.as_tensor(v))
+                .to(device=device, dtype=dtype).reshape(-1)
+                for v in dhs
+            ], dim=0)                                  # (K, d)
+        else:
+            D = dhs.to(device=device, dtype=dtype) if isinstance(dhs, torch.Tensor) \
+                else torch.as_tensor(dhs, device=device, dtype=dtype)
+            if D.ndim == 1:
+                D = D[None, :]
+        assert D.shape[1] == d, f"dhs vectors have dim {D.shape[1]} != d={d}"
+        out["c_shift"] = curv(D)                       # (K,)
+
+    return out
 
 
 def overlay_feature_loss_curvature(curves, res, out_dir):
@@ -854,6 +872,7 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
 
     s_g   = float(_np(res["shift"]["g"])[shift_idx])
     s_grm = float(_np(res["shift"]["g_rms"])[shift_idx])
+    s_c = float(_np(res["shift"]["curv"])[shift_idx])
 
     line_kw = dict(marker="o", ms=4, lw=1.4, ls="-")
     xlabel = "rank (0 = highest variance)" if group == "eig" else "random direction index"
@@ -881,11 +900,13 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
         l2, = ax2.plot(x, c_bg, color=CURV_C, marker="s", ms=3.5,
                        lw=1.4, ls="-",
                        alpha=0.9, label=f"{group}  c(u)")
+        lsc = ax2.axhline(s_c, color=CURV_C, ls=":", lw=1.8,
+                              label=f"shift[{shift_idx}] c={s_c:.3g}")
         ax2.set_ylabel("c(u)", color=CURV_C)
         ax2.tick_params(axis="y", labelcolor=CURV_C)
         if curv_log:
             ax2.set_yscale("log")
-        ax.legend(handles=[l1, lshift, l2], fontsize=8, frameon=False, loc="best")
+        ax.legend(handles=[l1, lshift, l2, lsc], fontsize=8, frameon=False, loc="best")
         return ax2
 
     _panel(axL, g_bg,   s_g,   "g(v)")
