@@ -841,7 +841,6 @@ def retain_gradient_alignment(
 
 FORCE_C = "#2b6cb0"   # g / g_rms  (LEFT axis)
 CURV_C  = "#c05621"   # c(u)       (RIGHT axis)
-SHIFT_C = "#276749"   # forget-shift horizontal reference (force)
 
 
 def _np(x):
@@ -868,7 +867,7 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
     grm_bg = _np(res[group]["g_rms"])
     c_bg   = _np(res[group]["curv"])
     M = len(g_bg)
-    x = np.arange(1, M + 1)
+    x = np.arange(M)
 
     s_g   = float(_np(res["shift"]["g"])[shift_idx])
     s_grm = float(_np(res["shift"]["g_rms"])[shift_idx])
@@ -883,12 +882,12 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
         (axL, axR) = ax_pair
         fig = axL.figure
 
-    def _panel(ax, force_bg, force_val, force_label):
+    def _panel(ax, force_bg, force_val, force_label, shift_label):
         # LEFT axis: force metric (background spectrum + shift ref line)
         l1, = ax.plot(x, force_bg, color=FORCE_C, **line_kw,
                       label=f"{group}  {force_label}")
-        lshift = ax.axhline(force_val, color=SHIFT_C, ls="--", lw=1.8,
-                            label=f"shift[{shift_idx}] {force_label}={force_val:.3g}")
+        lshift = ax.axhline(force_val, color=FORCE_C, ls="--", lw=1.8,
+                            label=f"shift[{shift_idx}] {shift_label}={force_val:.3g}")
         ax.set_xlabel(xlabel)
         ax.set_ylabel(force_label, color=FORCE_C)
         ax.tick_params(axis="y", labelcolor=FORCE_C)
@@ -901,7 +900,7 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
                        lw=1.4, ls="-",
                        alpha=0.9, label=f"{group}  c(u)")
         lsc = ax2.axhline(s_c, color=CURV_C, ls=":", lw=1.8,
-                              label=f"shift[{shift_idx}] c={s_c:.3g}")
+                              label=f"shift[{shift_idx}] c(v_j)={s_c:.3g}")
         ax2.set_ylabel("c(u)", color=CURV_C)
         ax2.tick_params(axis="y", labelcolor=CURV_C)
         if curv_log:
@@ -909,10 +908,10 @@ def plot_shift_vs_spectrum(res, group, shift_idx, curv_log=False, ax_pair=None):
         ax.legend(handles=[l1, lshift, l2, lsc], fontsize=8, frameon=False, loc="best")
         return ax2
 
-    _panel(axL, g_bg,   s_g,   "g(v)")
-    _panel(axR, grm_bg, s_grm, "g_rms(v)")
-    axL.set_title(f"g(v) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
-    axR.set_title(f"g_rms(v) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
+    _panel(axL, g_bg,   s_g,   "g(u)", "g(v_j)")
+    _panel(axR, grm_bg, s_grm, "g_rms(u)", "g_rms(v_j)")
+    axL.set_title(f"g(u) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
+    axR.set_title(f"g_rms(u) vs c(u)  —  {group} & forget shift retrain{shift_idx}")
     fig.tight_layout()
     return fig
 
@@ -938,3 +937,61 @@ def plot_all_shift_vs_spectrum(res, savedir=None, curv_log=False, close=True):
                 plt.close(fig)
             out.append((group, j, path))
     return out
+
+
+def _col(res, group, key):
+    x = res[group][key]
+    x = x.detach().cpu().numpy() if hasattr(x, "detach") else np.asarray(x)
+    return x.astype(float).ravel()
+
+
+def save_alignment_csvs(res,
+                        output_dir,
+                        shift_csv="forget_shift_alignment.csv",
+                        spectrum_csv="eig_random_alignment.csv",
+                        float_format=None):
+    """
+    Write two CSVs from the res dict used for plotting.
+
+    shift_csv    : one row per forget retrain-shift direction
+                   columns: retrain, g(v_j), g_rms(v_j), c(v_j)
+                   'retrain' = 0..K-1
+    spectrum_csv : one row per rank, eig and random side by side
+                   columns: rank, g(u), g_rms(u), c(u),
+                            g(random), g_rms(random), c(random)
+                   'rank' = 0..M-1  (requires len(eig) == len(random))
+
+    Returns (shift_csv, spectrum_csv).
+    """
+    # ---- forget-shift CSV ----------------------------------------------
+    g_s, grm_s, c_s = (_col(res, "shift", k) for k in ("g", "g_rms", "curv"))
+    K = len(g_s)
+    if not (len(grm_s) == len(c_s) == K):
+        raise ValueError(f"shift group length mismatch: "
+                         f"g={K}, g_rms={len(grm_s)}, curv={len(c_s)}")
+    pd.DataFrame({
+        "retrain":    np.arange(K),
+        "g(v_j)":     g_s,
+        "g_rms(v_j)": grm_s,
+        "c(v_j)":     c_s,
+    }).to_csv(f"{output_dir}/{shift_csv}", index=False, float_format=float_format)
+
+    # ---- eig + random spectrum CSV -------------------------------------
+    g_e, grm_e, c_e = (_col(res, "eig", k)    for k in ("g", "g_rms", "curv"))
+    g_r, grm_r, c_r = (_col(res, "random", k) for k in ("g", "g_rms", "curv"))
+    lens = {len(g_e), len(grm_e), len(c_e), len(g_r), len(grm_r), len(c_r)}
+    if len(lens) != 1:
+        raise ValueError(f"eig/random columns must all share one length; got {lens}. "
+                         "The rank column requires len(eig) == len(random).")
+    M = lens.pop()
+    pd.DataFrame({
+        "rank":            np.arange(M),
+        "g(u)":            g_e,
+        "g_rms(u)":        grm_e,
+        "c(u)":            c_e,
+        "g(random)":       g_r,
+        "g_rms(random)":   grm_r,
+        "c(random)":       c_r,
+    }).to_csv(f"{output_dir}/{spectrum_csv}", index=False, float_format=float_format)
+
+    return shift_csv, spectrum_csv

@@ -352,6 +352,8 @@ def main(args) -> None:
 
         theory.plot_all_shift_vs_spectrum(res, savedir=f"{output_path}gradient_curvature/centered")
 
+        theory.save_alignment_csvs(res, output_dir=f"{output_path}gradient_curvature/centered")
+
     metrics_dict = {}
 
     logger.info("Saving computed metrics...")
