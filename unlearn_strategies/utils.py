@@ -293,6 +293,7 @@ def attribute_K_at_step(model, forget_loader, v_dict, retain_batch,
  
     # 1) grad_s per reference — eval BN, pristine pre-step theta. Toggle BN once.
     run_bn_train = bn_is_training(model)                # remember the run's mode
+    print("BN mode at step 1:", "train" if run_bn_train else "eval")
     set_bn_eval(model, True)
     grad_s = {name: compute_grad_s(model, forget_loader, vj, device)[0]
               for name, vj in v_dict.items()}

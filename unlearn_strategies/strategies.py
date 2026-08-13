@@ -15,6 +15,7 @@ from collections import OrderedDict
 import torch.nn.functional as F
 from torch import nn
 from src import metrics, analyse
+from src import utils as src_utils
 
 
 def baseline(
@@ -39,7 +40,7 @@ def retrain(
     logger.info("Loading original model checkpoints...")
     ori_model_path = f"{args.model_root}/baseline.pt"
     ori_model = deepcopy(unlearning_teacher)
-    utils.load_model_weights(ori_model, ori_model_path, device)
+    src_utils.load_model_weights(ori_model, ori_model_path, device)
     
     logger.info("Loading retrained model checkpoints...")
     retrain0_model_path = f"{args.model_root}/retrain0.pt"
@@ -64,16 +65,16 @@ def retrain(
     retrain8_model = deepcopy(unlearning_teacher)
     retrain9_model = deepcopy(unlearning_teacher)
 
-    utils.load_model_weights(retrain0_model, retrain0_model_path, device)
-    utils.load_model_weights(retrain1_model, retrain1_model_path, device)
-    utils.load_model_weights(retrain2_model, retrain2_model_path, device)
-    utils.load_model_weights(retrain3_model, retrain3_model_path, device)
-    utils.load_model_weights(retrain4_model, retrain4_model_path, device)
-    utils.load_model_weights(retrain5_model, retrain5_model_path, device)
-    utils.load_model_weights(retrain6_model, retrain6_model_path, device)
-    utils.load_model_weights(retrain7_model, retrain7_model_path, device)
-    utils.load_model_weights(retrain8_model, retrain8_model_path, device)
-    utils.load_model_weights(retrain9_model, retrain9_model_path, device)
+    src_utils.load_model_weights(retrain0_model, retrain0_model_path, device)
+    src_utils.load_model_weights(retrain1_model, retrain1_model_path, device)
+    src_utils.load_model_weights(retrain2_model, retrain2_model_path, device)
+    src_utils.load_model_weights(retrain3_model, retrain3_model_path, device)
+    src_utils.load_model_weights(retrain4_model, retrain4_model_path, device)
+    src_utils.load_model_weights(retrain5_model, retrain5_model_path, device)
+    src_utils.load_model_weights(retrain6_model, retrain6_model_path, device)
+    src_utils.load_model_weights(retrain7_model, retrain7_model_path, device)
+    src_utils.load_model_weights(retrain8_model, retrain8_model_path, device)
+    src_utils.load_model_weights(retrain9_model, retrain9_model_path, device)
 
     logger.info("Computing mean representations shift vectors...")
     model_dict = {
