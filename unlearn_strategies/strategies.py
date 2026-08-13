@@ -14,7 +14,7 @@ from tqdm import tqdm
 from collections import OrderedDict
 import torch.nn.functional as F
 from torch import nn
-from src import metrics
+from src import metrics, analyse
 
 
 def baseline(
@@ -31,8 +31,73 @@ def retrain(
     retain_aug_loader: DataLoader,
     test_retain_loader: DataLoader,
     device: torch.device,
+    unlearn_eval_loader: DataLoader,
+    unlearning_teacher,
     **kwargs,
 ) -> torch.nn.Module:
+
+    logger.info("Loading original model checkpoints...")
+    ori_model_path = f"{args.model_root}/baseline.pt"
+    ori_model = deepcopy(unlearning_teacher)
+    utils.load_model_weights(ori_model, ori_model_path, device)
+    
+    logger.info("Loading retrained model checkpoints...")
+    retrain0_model_path = f"{args.model_root}/retrain0.pt"
+    retrain1_model_path = f"{args.model_root}/retrain1.pt"
+    retrain2_model_path = f"{args.model_root}/retrain2.pt"
+    retrain3_model_path = f"{args.model_root}/retrain3.pt"
+    retrain4_model_path = f"{args.model_root}/retrain4.pt"
+    retrain5_model_path = f"{args.model_root}/retrain5.pt"
+    retrain6_model_path = f"{args.model_root}/retrain6.pt"
+    retrain7_model_path = f"{args.model_root}/retrain7.pt"
+    retrain8_model_path = f"{args.model_root}/retrain8.pt"
+    retrain9_model_path = f"{args.model_root}/retrain9.pt"
+
+    retrain0_model = deepcopy(unlearning_teacher)
+    retrain1_model = deepcopy(unlearning_teacher)
+    retrain2_model = deepcopy(unlearning_teacher)
+    retrain3_model = deepcopy(unlearning_teacher)
+    retrain4_model = deepcopy(unlearning_teacher)
+    retrain5_model = deepcopy(unlearning_teacher)
+    retrain6_model = deepcopy(unlearning_teacher)
+    retrain7_model = deepcopy(unlearning_teacher)
+    retrain8_model = deepcopy(unlearning_teacher)
+    retrain9_model = deepcopy(unlearning_teacher)
+
+    utils.load_model_weights(retrain0_model, retrain0_model_path, device)
+    utils.load_model_weights(retrain1_model, retrain1_model_path, device)
+    utils.load_model_weights(retrain2_model, retrain2_model_path, device)
+    utils.load_model_weights(retrain3_model, retrain3_model_path, device)
+    utils.load_model_weights(retrain4_model, retrain4_model_path, device)
+    utils.load_model_weights(retrain5_model, retrain5_model_path, device)
+    utils.load_model_weights(retrain6_model, retrain6_model_path, device)
+    utils.load_model_weights(retrain7_model, retrain7_model_path, device)
+    utils.load_model_weights(retrain8_model, retrain8_model_path, device)
+    utils.load_model_weights(retrain9_model, retrain9_model_path, device)
+
+    logger.info("Computing mean representations shift vectors...")
+    model_dict = {
+        "original": ori_model,
+        "retrain0": retrain0_model,
+        "retrain1": retrain1_model,
+        "retrain2": retrain2_model,
+        "retrain3": retrain3_model,
+        "retrain4": retrain4_model,
+        "retrain5": retrain5_model,
+        "retrain6": retrain6_model,
+        "retrain7": retrain7_model,
+        "retrain8": retrain8_model,
+        "retrain9": retrain9_model
+    }
+    mean_reps_dict = analyse.extract_representation_from_n_models(model_dict, unlearn_eval_loader, device)
+    mean_ori = mean_reps_dict["original"]
+
+    # Compute shifts
+    dhs = dict()
+    for i in range(10):
+        mean_retrain = mean_reps_dict[f"retrain{i}"]
+        shift_retrain = mean_retrain - mean_ori
+        dhs[f"retrain{i}"] = shift_retrain
 
     # Retrain model from scratch without unlearn dataset
     retrain_model = utils.training_optimization(
@@ -44,6 +109,8 @@ def retrain(
         device= device,
         desc= "Retraining model",
         args=args,
+        unlearn_eval_loader=unlearn_eval_loader,
+        v_dict=dhs
     )
 
     return retrain_model

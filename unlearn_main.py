@@ -204,7 +204,8 @@ def main(args) -> None:
         test_retain_loader=test_retain_loader,
         num_channels=num_channels,
         num_classes=num_classes,
-        device=device
+        device=device,
+        unlearn_eval_loader=unlearn_eval_loader,
     )
     end_time = time.time()
     logger.info("Unlearning process completed.")

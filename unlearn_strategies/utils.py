@@ -31,6 +31,8 @@ def training_optimization(
     nesterov: bool = False,
     label_smoothing: float = 0.0,
     mixup: bool = False,
+    unlearn_eval_loader: DataLoader = None,
+    v_dict: dict = None,
 ) -> torch.nn.Module:
     # Copy model, avoid overwriting
     trained_model = copy.deepcopy(model)
@@ -135,12 +137,19 @@ def training_optimization(
         loss_list = []
         #trained_model.train()
         trained_model.eval()
-        for images, labels in train_loader:
+        for it, (images, labels) in enumerate(train_loader):
             images = images.to(device, non_blocking=True)
             labels = labels.long().to(device, non_blocking=True)
 
             if desc == "Retraining model" and mixup:
                 images, labels = mixup_fn(images, labels)
+
+            if epoch == 1 and it == 0:
+                K_step1 = attribute_K_at_step(trained_model, unlearn_eval_loader, v_dict,
+                                            (images, labels), optimizer, device, loss_func)
+                for name, k in K_step1.items():
+                    print(f"K_j/{name}", k)   # expect k < 0
+                break                            # step already done inside
 
             trained_model.zero_grad()
             output = trained_model(images)
@@ -153,6 +162,9 @@ def training_optimization(
             if desc == "Retraining model":
                 if warmup_scheduler is not None and epoch <= args.warm:
                     warmup_scheduler.step()
+
+        best_trained_model = copy.deepcopy(trained_model)
+        break
 
         mean_loss = np.mean(np.array(loss_list))
         train_acc = metrics.evaluate(val_loader= train_loader, model= trained_model, device= device)['Acc']
@@ -194,6 +206,110 @@ def training_optimization(
             best_trained_model = copy.deepcopy(trained_model)
 
     return best_trained_model
+
+
+def _trainable_params(model):
+    return [p for p in model.parameters() if p.requires_grad]
+ 
+ 
+def _flat_grad(params):
+    # None grad -> zeros. Classifier-head params do not affect the features, so
+    # grad_s is exactly zero there; they must still occupy their flat slots.
+    return torch.cat([
+        (p.grad if p.grad is not None else torch.zeros_like(p)).reshape(-1)
+        for p in params
+    ])
+
+
+def set_bn_eval(model, eval_mode=True):
+    """Put only BatchNorm layers into eval (or back to train). Leaves the rest."""
+    for m in model.modules():
+        if isinstance(m, nn.modules.batchnorm._BatchNorm):
+            m.train(not eval_mode)
+ 
+ 
+def bn_is_training(model):
+    """True if any BatchNorm layer is currently in train mode (the run's mode)."""
+    return any(m.training for m in model.modules()
+               if isinstance(m, nn.modules.batchnorm._BatchNorm))
+
+
+def read_grad(model):
+    """Flat copy of the CURRENT .grad. Call right after backward, before step."""
+    return _flat_grad(_trainable_params(model)).detach().clone()
+
+
+def compute_grad_s(model, forget_loader, v, device):
+    """
+    grad_s = d/dtheta [ mean_{x in D_f} h(x).v ] in EVAL-BN mode.
+    Returns (flat grad aligned to _trainable_params, N).
+    """
+    params = _trainable_params(model)
+    v_dev = v.to(device)
+    model.zero_grad(set_to_none=True)
+ 
+    N = 0
+    for x, *_ in forget_loader:
+        x = x.to(device, non_blocking=True)
+        h = model.feature_extractor(x)
+        (h @ v_dev.to(h.dtype)).sum().backward()        # accumulate d(sum h.v)
+        N += x.size(0)
+    for p in params:
+        if p.grad is not None:
+            p.grad /= N                                 # sum -> mean
+ 
+    grad_s = _flat_grad(params).detach().clone()
+    model.zero_grad(set_to_none=True)
+
+    return grad_s, N
+
+
+def attribute_K_at_step(model, forget_loader, v_dict, retain_batch,
+                        optimizer, device, criterion=None):
+    """
+    Parameters
+    ----------
+    model         : must expose .feature_extractor and .classifier_head (or a
+                    forward that composes them). Should already be in the RUN's
+                    mode on entry (Run 1: BN eval; Run 2: BN train).
+    forget_loader : DataLoader over D_f, shuffle=False (order not critical here,
+                    since only the mean over D_f enters grad_s).
+    v_dict        : {retrain_name -> unit direction v_j^F (D,)}.
+    retain_batch  : (x_r, y_r) — the SAME minibatch this training step uses.
+    optimizer     : the run's optimizer (fresh; momentum buffer 0 at step 1).
+    criterion     : defaults to CrossEntropyLoss (mean).
+ 
+    Returns
+    -------
+    dict {retrain_name -> K_j}.   Expect K_j < 0.
+ 
+    NOTE: this PERFORMS the real optimizer step (the training backward it runs is
+    the actual step-1 backward). Use it in place of your normal backward+step at
+    iteration 1, then continue the loop normally.
+    """
+    criterion = criterion or nn.CrossEntropyLoss()
+    x_r, y_r = retain_batch
+    x_r = x_r.to(device); y_r = y_r.to(device)
+ 
+    # 1) grad_s per reference — eval BN, pristine pre-step theta. Toggle BN once.
+    run_bn_train = bn_is_training(model)                # remember the run's mode
+    set_bn_eval(model, True)
+    grad_s = {name: compute_grad_s(model, forget_loader, vj, device)[0]
+              for name, vj in v_dict.items()}
+    set_bn_eval(model, not run_bn_train)                # restore run's BN mode
+ 
+    # 2) the REAL training backward -> grad_L_r (run's BN mode, actual batch).
+    optimizer.zero_grad(set_to_none=True)
+    criterion(model(x_r), y_r).backward()
+    grad_Lr = read_grad(model)                          # pure loss grad (wd in .step)
+ 
+    # 3) K_j per reference.
+    K = {name: torch.dot(gs.double(), grad_Lr.double()).item()
+         for name, gs in grad_s.items()}
+ 
+    # 4) the real optimizer step (grad_L_r is in .grad — do NOT re-zero).
+    optimizer.step()
+    return K
 
 
 def device_configuration(
