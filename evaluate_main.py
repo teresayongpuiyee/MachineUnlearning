@@ -43,7 +43,6 @@ parser.add_argument("-metrics", type= str, nargs='+',
                               "rand_proj"
                               ], 
                     help= "Metrics to evaluate")
-parser.add_argument("-random_direction", dest="random_direction", action="store_true", default=False, help="Random direction projection")
 parser.add_argument("-num_rand", type= int, default= 50, help= "Number of random directions")
 
 # Training hyperparameter
@@ -320,10 +319,10 @@ def main(args) -> None:
         cka_f_r_proj = cka_f_r
 
         null_cka_f, null_mia = [], []
-        for s in range(10, M):
+        for s in range(M):
 
-            train_random_reps, _ = analyse.project_representations(raw_train_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
-            test_random_reps, _ = analyse.project_representations(raw_test_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
+            train_random_reps, _ = analyse.project_representations(raw_train_reps, None, None, None, device, projection=args.project_method, random=True, seed=s)
+            test_random_reps, _ = analyse.project_representations(raw_test_reps, None, None, None, device, projection=args.project_method, random=True, seed=s)
             
             _, pour_rand_rmia_asr = repr_metrics.pour_rmia(
                 train_reps=train_random_reps,
@@ -334,8 +333,8 @@ def main(args) -> None:
             )
             null_mia.append(pour_rand_rmia_asr)
 
-            forget_rand_reps, _ = analyse.project_representations(raw_forget_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)
-            forget_rand_retrain_reps, _ = analyse.project_representations(raw_forget_retrain_reps, None, None, None, device, projection=args.project_method, random=args.random_direction, seed=s)   
+            forget_rand_reps, _ = analyse.project_representations(raw_forget_reps, None, None, None, device, projection=args.project_method, random=True, seed=s)
+            forget_rand_retrain_reps, _ = analyse.project_representations(raw_forget_retrain_reps, None, None, None, device, projection=args.project_method, random=True, seed=s)   
 
             cka_f_r_rand = repr_metrics.linear_cka(forget_rand_reps, forget_rand_retrain_reps)
 
