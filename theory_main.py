@@ -78,7 +78,6 @@ def main(args) -> None:
         unlearn_class=args.unlearn_class
     )
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     retain_loader = DataLoader(retain_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
     unlearn_loader = DataLoader(unlearn_dataset, batch_size=args.batch_size, shuffle=False, num_workers=args.num_workers, pin_memory=True, persistent_workers=True)
 
@@ -151,6 +150,13 @@ def main(args) -> None:
             shift_retrain = mean_retrain - mean_ori
             dhs.append(shift_retrain)
 
+        null_dir = []
+        null_index = []
+        for i in range(10):
+            for j in range(i+1, 10):
+                null_dir.append(mean_reps_dict[f"retrain{j}"] - mean_reps_dict[f"retrain{i}"])
+                null_index.append(f"retrain{i}_retrain{j}")
+
         W = ori_model.fc.weight.detach().cpu()   # (C, d)
         b = ori_model.fc.bias.detach().cpu()     # (C,)
 
@@ -167,7 +173,7 @@ def main(args) -> None:
         print("mean abs diff:", diff.mean().item())
         print("allclose     :", torch.allclose(logits_r, logits_manual, atol=1e-4, rtol=1e-4))
 
-        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"], dhs=dhs)
+        curv = theory.feature_loss_curvature(H_r, W, b, B["centered"]["eigvecs"], dhs=dhs, null_dir=null_dir)
 
     if "concentration" in args.exps:
         # spectra agree off the top: compare from rank 1 onward
@@ -344,15 +350,17 @@ def main(args) -> None:
             y_r,         # (N_r,) integer retain labels  <-- REQUIRED
             B["centered"]["eigvecs"],          # (d, d) centered eigenvectors, columns, descending (Task C)
             dhs,              # (K, d) forget-set mean-shift vectors, or list of (d,)
+            null_dir,
         )
 
         res["eig"]["curv"] = curv["c_eig"]
         res["random"]["curv"] = curv["c_rand"]
         res["shift"]["curv"] = curv["c_shift"]
+        res["null"]["curv"] = curv["c_null"]
 
         theory.plot_all_shift_vs_spectrum(res, savedir=f"{output_path}gradient_curvature/centered")
 
-        theory.save_alignment_csvs(res, output_dir=f"{output_path}gradient_curvature/centered")
+        theory.save_alignment_csvs(res, null_index, output_dir=f"{output_path}gradient_curvature/centered")
 
     metrics_dict = {}
 

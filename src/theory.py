@@ -382,7 +382,7 @@ def full_concentration_report(dhs, eigvals, eigvecs,
 
 
 @torch.no_grad()
-def feature_loss_curvature(H_feats, W, b, eigvecs, dhs=None, n_random=20, seed=0):
+def feature_loss_curvature(H_feats, W, b, eigvecs, dhs=None, null_dir=None, n_random=20, seed=0):
     """
     H_feats : (N_r, d) retain features at theta_o (float64).
     W       : (C, d) final FC weight (logits = W @ h + b), from ORIGINAL model.
@@ -439,6 +439,21 @@ def feature_loss_curvature(H_feats, W, b, eigvecs, dhs=None, n_random=20, seed=0
                 D = D[None, :]
         assert D.shape[1] == d, f"dhs vectors have dim {D.shape[1]} != d={d}"
         out["c_shift"] = curv(D)                       # (K,)
+
+    if null_dir is not None:
+        if isinstance(null_dir, (list, tuple)):
+            null = torch.stack([
+                (v.detach() if isinstance(v, torch.Tensor) else torch.as_tensor(v))
+                .to(device=device, dtype=dtype).reshape(-1)
+                for v in null_dir
+            ], dim=0)                                  # (K, d)
+        else:
+            null = null_dir.to(device=device, dtype=dtype) if isinstance(null_dir, torch.Tensor) \
+                else torch.as_tensor(null_dir, device=device, dtype=dtype)
+            if null.ndim == 1:
+                null = null[None, :]
+        assert null.shape[1] == d, f"null directions have dim {null.shape[1]} != d={d}"
+        out["c_null"] = curv(null)                        # (K,)
 
     return out
 
@@ -758,6 +773,7 @@ def retain_gradient_alignment(
     y_labels,         # (N_r,) integer retain labels  <-- REQUIRED
     eigvecs,          # (d, d) centered eigenvectors, columns, descending (Task C)
     dhs,              # (K, d) forget-set mean-shift vectors, or list of (d,)
+    null_dir,    # (M, d) null directions, or list of (d,)
     n_eig=20,
     n_random=20,
     seed=0,
@@ -808,13 +824,22 @@ def retain_gradient_alignment(
         D = D[None, :]
     assert D.shape[1] == d, f"dhs vectors have dim {D.shape[1]} != d={d}"
 
+    # ---- null sets --------------------------------------------------
+    if isinstance(null_dir, (list, tuple)):
+        null = torch.stack([_to_tensor(v, dtype, device).ravel() for v in null_dir], 0)
+    else:
+        null = _to_tensor(null_dir, dtype, device)
+    if null.ndim == 1:
+        null = null[None, :]
+    assert null.shape[1] == d, f"null directions have dim {null.shape[1]} != d={d}"
+
     Veig = E[:, :n_eig].T          # (n_eig, d) rows = vectors
 
     gen = torch.Generator(device=device).manual_seed(seed)
     Vrand = torch.randn(n_random, d, generator=gen, dtype=dtype, device=device)
 
     if normalize_dirs:
-        D, Veig, Vrand = _unit(D), _unit(Veig), _unit(Vrand)
+        D, Veig, Vrand, null = _unit(D), _unit(Veig), _unit(Vrand), _unit(null)
 
     # ---- softmax of ORIGINAL model on retain -----------------------------
     Z = H @ W.T + b                              # (N_r, C)
@@ -835,6 +860,7 @@ def retain_gradient_alignment(
         "shift":  _stats(D),
         "eig":    _stats(Veig),
         "random": _stats(Vrand),
+        "null":   _stats(null),
         "gbar_norm": G.mean(0).norm().item(),
     }
 
@@ -945,10 +971,30 @@ def _col(res, group, key):
     return x.astype(float).ravel()
 
 
+def _with_stats(df, label_col, exclude_cols=None):
+    """
+    Append 'mean' and 'std' summary rows to df, computed over every column
+    except label_col (the index column, which carries the row labels) and
+    anything named in exclude_cols. Excluded columns are left blank in the
+    summary rows. std is the sample std (ddof=1), matching pandas' default.
+    """
+    skip = [label_col, *(exclude_cols or ())]
+    value_cols = [c for c in df.columns if c not in skip]
+    stats = pd.DataFrame(
+        [df[value_cols].mean(), df[value_cols].std()],
+        index=["mean", "std"],
+    ).reset_index(drop=True)
+    stats.insert(0, label_col, ["mean", "std"])
+    df = df.astype({c: object for c in skip if c in df.columns})
+    return pd.concat([df, stats], ignore_index=True)[df.columns]
+
+
 def save_alignment_csvs(res,
+                        null_index,
                         output_dir,
                         shift_csv="forget_shift_alignment.csv",
                         spectrum_csv="eig_random_alignment.csv",
+                        null_csv="null_shift_alignment.csv",
                         float_format=None):
     """
     Write two CSVs from the res dict used for plotting.
@@ -961,7 +1007,10 @@ def save_alignment_csvs(res,
                             g(random), g_rms(random), c(random)
                    'rank' = 0..M-1  (requires len(eig) == len(random))
 
-    Returns (shift_csv, spectrum_csv).
+    Each CSV ends with two extra rows, labelled 'mean' and 'std' in its
+    index column, holding the column-wise mean and sample std (ddof=1).
+
+    Returns (shift_csv, spectrum_csv, null_csv).
     """
     # ---- forget-shift CSV ----------------------------------------------
     g_s, grm_s, c_s = (_col(res, "shift", k) for k in ("g", "g_rms", "curv"))
@@ -969,12 +1018,12 @@ def save_alignment_csvs(res,
     if not (len(grm_s) == len(c_s) == K):
         raise ValueError(f"shift group length mismatch: "
                          f"g={K}, g_rms={len(grm_s)}, curv={len(c_s)}")
-    pd.DataFrame({
+    _with_stats(pd.DataFrame({
         "retrain":    np.arange(K),
         "g(v_j)":     g_s,
         "g_rms(v_j)": grm_s,
         "c(v_j)":     c_s,
-    }).to_csv(f"{output_dir}/{shift_csv}", index=False, float_format=float_format)
+    }), "retrain").to_csv(f"{output_dir}/{shift_csv}", index=False, float_format=float_format)
 
     # ---- eig + random spectrum CSV -------------------------------------
     g_e, grm_e, c_e = (_col(res, "eig", k)    for k in ("g", "g_rms", "curv"))
@@ -984,7 +1033,7 @@ def save_alignment_csvs(res,
         raise ValueError(f"eig/random columns must all share one length; got {lens}. "
                          "The rank column requires len(eig) == len(random).")
     M = lens.pop()
-    pd.DataFrame({
+    _with_stats(pd.DataFrame({
         "rank":            np.arange(M),
         "g(u)":            g_e,
         "g_rms(u)":        grm_e,
@@ -992,6 +1041,21 @@ def save_alignment_csvs(res,
         "g(random)":       g_r,
         "g_rms(random)":   grm_r,
         "c(random)":       c_r,
-    }).to_csv(f"{output_dir}/{spectrum_csv}", index=False, float_format=float_format)
+    }), "rank", exclude_cols=["g(u)", "g_rms(u)", "c(u)"]).to_csv(f"{output_dir}/{spectrum_csv}", index=False, float_format=float_format)
 
-    return shift_csv, spectrum_csv
+    # ---- null-shift CSV ----------------------------------------------
+    g_n, grm_n, c_n = (_col(res, "null", k) for k in ("g", "g_rms", "curv"))
+    len_n = len(g_n)
+    if not (len(grm_n) == len(c_n) == len(null_index) == len_n):
+        raise ValueError(f"null group length mismatch: "
+                        f"g={len_n}, g_rms={len(grm_n)}, curv={len(c_n)}, "
+                        f"index={len(null_index)}")
+
+    _with_stats(pd.DataFrame({
+        "retrain_pair":null_index,
+        "g(n_ij)":     g_n,
+        "g_rms(n_ij)": grm_n,
+        "c(n_ij)":     c_n,
+    }), "retrain_pair").to_csv(f"{output_dir}/{null_csv}", index=False, float_format=float_format)
+
+    return shift_csv, spectrum_csv, null_csv
