@@ -145,8 +145,12 @@ def training_optimization(
                 images, labels = mixup_fn(images, labels)
 
             if epoch == 1 and it == 0:
+                actual_model_path = f"{args.model_root}/{args.model_name}{epoch}s{it}.pt"
+                actual_model = copy.deepcopy(model)
+                utils.load_model_weights(actual_model, actual_model_path, device)
+
                 K_step1 = attribute_K_at_step(trained_model, unlearn_eval_loader, v_dict,
-                                            (images, labels), optimizer, device, loss_func)
+                                            (images, labels), optimizer, device, loss_func, actual_model)
                 for name, k in K_step1.items():
                     print(f"K_j/{name}", k)   # expect k < 0
                 break                            # step already done inside
@@ -264,8 +268,13 @@ def compute_grad_s(model, forget_loader, v, device):
     return grad_s, N
 
 
+def flat_params(model):
+    return torch.cat([p.detach().reshape(-1)
+                      for p in model.parameters() if p.requires_grad])
+
+
 def attribute_K_at_step(model, forget_loader, v_dict, retain_batch,
-                        optimizer, device, criterion=None):
+                        optimizer, device, criterion=None, actual_model=None):
     """
     Parameters
     ----------
@@ -287,6 +296,11 @@ def attribute_K_at_step(model, forget_loader, v_dict, retain_batch,
     the actual step-1 backward). Use it in place of your normal backward+step at
     iteration 1, then continue the loop normally.
     """
+    if actual_model is not None:
+        theta0 = flat_params(model)
+        theta1 = flat_params(actual_model)
+        dtheta_actual = theta1 - theta0
+    
     criterion = criterion or nn.CrossEntropyLoss()
     x_r, y_r = retain_batch
     x_r = x_r.to(device); y_r = y_r.to(device)
@@ -305,8 +319,12 @@ def attribute_K_at_step(model, forget_loader, v_dict, retain_batch,
     grad_Lr = read_grad(model)                          # pure loss grad (wd in .step)
  
     # 3) K_j per reference.
-    K = {name: torch.dot(gs.double(), grad_Lr.double()).item()
-         for name, gs in grad_s.items()}
+    if actual_model is None:
+        K = {name: torch.dot(gs.double(), grad_Lr.double()).item()
+            for name, gs in grad_s.items()}
+    else:
+        K = {name: torch.dot(gs.double(), dtheta_actual.double()).item()
+                    for name, gs in grad_s.items()}
  
     # 4) the real optimizer step (grad_L_r is in .grad — do NOT re-zero).
     optimizer.step()
