@@ -26,7 +26,8 @@ parser.add_argument("-model_dir", type=str, required=True, help="Path to models 
 parser.add_argument("-exps", type= str, nargs='+', 
                     default= ["concentration", 
                               "finetune",
-                              "gradient"
+                              "gradient",
+                              "forget_shift"
                               ], 
                     help= "Experiments to evaluate")
 parser.add_argument("-finetune_mode", type= str, default= "eval", help= "Mode for finetuning: eval or train")
@@ -87,11 +88,7 @@ def main(args) -> None:
     ori_model = getattr(models, args.model)(num_classes=num_classes, input_channels=num_channels).to(device)
     utils.load_model_weights(ori_model, ori_model_path, device)
 
-    if "gradient" in args.exps or "concentration" in args.exps:
-        logger.info("Computing concentration basis...")
-        H_r, y_r = repr_metrics.get_representations(retain_loader, ori_model)   # (N_r, 512) at theta_o
-        B = theory.concentration_basis(H_r)
-
+    if "gradient" in args.exps or "concentration" in args.exps or "forget_shift" in args.exps:
         logger.info("Loading retrained model checkpoints...")
         retrain0_model_path = f"{args.model_dir}/retrain0.pt"
         retrain1_model_path = f"{args.model_dir}/retrain1.pt"
@@ -140,13 +137,18 @@ def main(args) -> None:
             "retrain8": retrain8_model,
             "retrain9": retrain9_model
         }
-        mean_reps_dict = analyse.extract_representation_from_n_models(model_dict, unlearn_loader, device)
-        mean_ori = mean_reps_dict["original"]
+        reps_dict = analyse.extract_representation_from_n_models(model_dict, unlearn_loader, device, "none")
 
+    if "gradient" in args.exps or "concentration" in args.exps:
+        logger.info("Computing concentration basis...")
+        H_r, y_r = repr_metrics.get_representations(retain_loader, ori_model)   # (N_r, 512) at theta_o
+        B = theory.concentration_basis(H_r)
+
+        mean_ori = reps_dict["original"].mean(0)
         # Compute shifts
         dhs = []
         for i in range(10):
-            mean_retrain = mean_reps_dict[f"retrain{i}"]
+            mean_retrain = reps_dict[f"retrain{i}"].mean(0)
             shift_retrain = mean_retrain - mean_ori
             dhs.append(shift_retrain)
 
@@ -154,7 +156,7 @@ def main(args) -> None:
         null_index = []
         for i in range(10):
             for j in range(i+1, 10):
-                null_dir.append(mean_reps_dict[f"retrain{j}"] - mean_reps_dict[f"retrain{i}"])
+                null_dir.append(reps_dict[f"retrain{j}"].mean(0) - reps_dict[f"retrain{i}"].mean(0))
                 null_index.append(f"retrain{i}_retrain{j}")
 
         W = ori_model.fc.weight.detach().cpu()   # (C, d)
@@ -361,6 +363,19 @@ def main(args) -> None:
         theory.plot_all_shift_vs_spectrum(res, savedir=f"{output_path}gradient_curvature/centered")
 
         theory.save_alignment_csvs(res, null_index, output_dir=f"{output_path}gradient_curvature/centered")
+
+    if "forget_shift" in args.exps:
+
+        sample_dhs = []
+        for i in range(10):
+            sample_shift_retrain = reps_dict[f"retrain{i}"] - reps_dict["original"]
+            sample_dhs.append(sample_shift_retrain)
+
+        for i, sample_shift in enumerate(sample_dhs):
+            pc_forget_shift = theory.concentration_basis(sample_shift)
+
+            theory.explained_variance(pc_forget_shift, f"{output_path}forget_shift", csv_path=f"retrain{i}_evr.csv", plot_path=f"retrain{i}_evr.png")
+            theory.mean_shift_alignment(pc_forget_shift, f"{output_path}forget_shift", csv_path=f"retrain{i}_align.csv")
 
     metrics_dict = {}
 

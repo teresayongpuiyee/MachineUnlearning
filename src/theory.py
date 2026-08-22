@@ -1059,3 +1059,132 @@ def save_alignment_csvs(res,
     }), "retrain_pair").to_csv(f"{output_dir}/{null_csv}", index=False, float_format=float_format)
 
     return shift_csv, spectrum_csv, null_csv
+
+
+@torch.no_grad()
+def explained_variance(
+    basis: dict,
+    output_path: str,
+    which: str = "centered",
+    csv_path: str | None = "evr.csv",
+    plot_path: str | None = "evr.png",
+    thresholds=(0.5, 0.9, 0.95),
+):
+    """
+    EVR and cumulative EVR from a concentration_basis output.
+
+    which : "centered"   -> ratios are fractions of total variance, trace(Cov) = sum λ_i
+            "uncentered" -> ratios are fractions of total second-moment mass
+                            E[||h||^2] = trace(E[hh^T]); this is *energy*, not variance.
+
+    Writes one row per component (rank 1..d) to csv_path, a scree + cumulative plot to
+    plot_path. Returns (evr, cum, table, cross) where `cross` maps each threshold to the
+    smallest rank whose cumulative reaches it (None if never).
+    """
+    os.makedirs(output_path, exist_ok=True)
+    ev = basis[which]["eigvals"].to(torch.float64).clamp_min(0.0)
+    total = ev.sum()
+    if total <= 0:
+        raise ValueError(f"[{which}] eigenvalues sum to {total.item():.3e}; nothing to normalise.")
+
+    evr = ev / total
+    cum = torch.cumsum(evr, dim=0)
+    rank = torch.arange(1, ev.numel() + 1)
+
+    label = "explained_variance_ratio" if which == "centered" else "explained_energy_ratio"
+    table = pd.DataFrame({
+        "component": rank.numpy(),
+        "eigenvalue": ev.cpu().numpy(),
+        label: evr.cpu().numpy(),
+        f"cumulative_{label}": cum.cpu().numpy(),
+    })
+
+    cross = {}
+    for t in thresholds:
+        idx = (cum >= t).nonzero()
+        cross[t] = int(idx[0].item()) + 1 if idx.numel() else None
+
+    if csv_path is not None:
+        table.to_csv(f"{output_path}/{csv_path}", index=False)
+
+    if plot_path is not None:
+        fig, ax = plt.subplots(figsize=(7, 4))
+        ax.bar(rank.numpy(), evr.cpu().numpy(), color="0.7", label=label.replace("_", " "))
+        ax.set_xlabel("component"); ax.set_ylabel(label.replace("_", " "))
+        ax2 = ax.twinx()
+        ax2.plot(rank.numpy(), cum.cpu().numpy(), color="C3", marker=".", label="cumulative")
+        ax2.set_ylabel("cumulative"); ax2.set_ylim(0, 1.02)
+        for t, r in cross.items():
+            if r is not None:
+                ax2.axhline(t, ls=":", lw=0.8, color="0.5")
+                ax2.annotate(f"{int(t*100)}% @ k={r}", (r, t),
+                             fontsize=8, xytext=(4, -8), textcoords="offset points")
+        ax.set_title(f"{which} spectrum"); fig.tight_layout()
+        fig.savefig(f"{output_path}/{plot_path}", dpi=150); plt.close(fig)
+
+    return evr, cum, table, cross
+
+
+@torch.no_grad()
+def mean_shift_alignment(
+    basis: dict,
+    output_path: str,
+    csv_path: str = "align.csv",
+):
+    """
+    Does the global mean shift h_bar stand in for the leading axis of per-sample scatter?
+
+    PC1 = top eigenvector of the *centered* covariance (dominant fluctuation axis). The
+    uncentered top eigenvector is a poor comparison here: since E[hh^T] = Cov + h_bar h_bar^T,
+    it is pulled toward h_bar by construction and the alignment is near-tautological.
+
+    Returns:
+      cos_pc1 / abs_cos_pc1  cosine(h_bar, PC1). Eigvec sign is arbitrary, so |cos| is the
+                             alignment; |cos|≈1 means mean and top scatter axis coincide.
+      mean_norm              ||h_bar||
+      std_pc1                sqrt(λ_1) = std of the data along PC1
+      mag_ratio              ||h_bar|| / sqrt(λ_1). >1: the coherent shift outweighs the leading
+                             fluctuation; <1: scatter along PC1 is larger than the shift itself.
+      evr_pc1                λ_1 / trace(Cov): variance fraction PC1 explains.
+      evr_mean_dir           u^T Cov u / trace(Cov), u = h_bar/||h_bar||: variance fraction along
+                             the mean direction treated as a candidate component. The gap
+                             evr_pc1 − evr_mean_dir is the variance cost of using the mean axis
+                             instead of the true top axis.
+      mean_energy_frac       ||h_bar||^2 / (trace(Cov) + ||h_bar||^2): the mean's share of the
+                             total uncentered second moment E[||h||^2]. High -> shift is a
+                             coherent displacement one direction can carry; low -> per-sample
+                             heterogeneity dominates and no single direction suffices.
+    """
+    mean = basis["mean"].to(torch.float64)
+    mean_norm = mean.norm()
+    if mean_norm <= 0:
+        raise ValueError("h_bar has zero norm; nothing to align.")
+    u = mean / mean_norm
+
+    ev = basis["centered"]["eigvals"].to(torch.float64).clamp_min(0.0)
+    V  = basis["centered"]["eigvecs"].to(torch.float64)
+    pc1, lam1 = V[:, 0], ev[0]
+    trace_cov = ev.sum()
+
+    cos_pc1 = torch.dot(u, pc1)                  # pc1 is unit norm
+    proj = V.T @ u
+    var_along_mean = (ev * proj.pow(2)).sum()    # u^T Cov u, from the eigendecomposition
+
+    align = {
+        "cos_pc1":          cos_pc1.item(),
+        "abs_cos_pc1":      cos_pc1.abs().item(),
+        "mean_norm":        mean_norm.item(),
+        "std_pc1":          lam1.sqrt().item(),
+        "mag_ratio":        (mean_norm / lam1.sqrt()).item(),
+        "evr_pc1":          (lam1 / trace_cov).item(),
+        "evr_mean_dir":     (var_along_mean / trace_cov).item(),
+        "mean_energy_frac": (mean_norm.pow(2) / (trace_cov + mean_norm.pow(2))).item(),
+    }
+
+    df = pd.DataFrame({
+        "metric": list(align.keys()),
+        "value":  list(align.values()),
+    })
+    df.to_csv(f"{output_path}/{csv_path}", index=False)
+
+    return csv_path
