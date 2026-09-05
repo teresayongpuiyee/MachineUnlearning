@@ -1188,3 +1188,129 @@ def mean_shift_alignment(
     df.to_csv(f"{output_path}/{csv_path}", index=False)
 
     return csv_path
+
+
+def _to_np(x):
+    if hasattr(x, "detach"):          # torch tensor
+        x = x.detach().cpu()
+    return np.asarray(x, dtype=np.float64)
+
+
+def _crossing(cum, t):
+    """Smallest 0-based rank where cumulative curve cum >= t, else None."""
+    idx = np.nonzero(cum >= t)[0]
+    return int(idx[0]) if idx.size else None
+
+
+def plot_concentration_mass(
+    curves,
+    eigvals,
+    row: int = 0,
+    thresholds=(0.5, 0.9, 0.95),
+    show_random: bool = True,
+    csv_path: str | None = "concentration_mass.csv",
+    plot_path: str | None = "concentration_mass.png",
+    title: str = "Classifier weight mass vs retrain-shift eigenbasis",
+):
+    """
+    Plot cumulative captured mass of a projected vector (e.g. the forget-class
+    classifier weight w_f) against rank in the retrain-shift eigenbasis
+    (rank 0 = highest shift variance).
+
+    curves    : dict from concentration_curves. Uses curves["cum mass"] (K,d),
+                and curves["random"] (n_random,d) if show_random.
+    eigvals   : basis["centered"]["eigvals"], (d,), descending. Defines the
+                cumulative-VARIANCE marks (Set A). MUST be the eigvals that
+                match the eigvecs passed to concentration_curves.
+    row       : which row of cum mass to plot (0 for the single-w_f case).
+
+    Two families of marks:
+      Set A (variance):  rank where cumulative eigenvalue variance hits t.
+                         Marked ON the mass curve -> "by the time the shift has
+                         spent t of its variance, this much of ||w_f||^2 is captured."
+      Set B (mass):      rank where the mass curve itself hits t.
+
+    Returns dict with the per-rank table and both crossing sets.
+    """
+    cum_all = _to_np(curves["shift"])
+    if cum_all.ndim == 1:
+        cum_all = cum_all[None, :]
+    cum = cum_all[row]                        # (d,)
+    d = cum.shape[0]
+    rank = np.arange(d)                       # 0-based, rank 0 = highest variance
+
+    ev = _to_np(eigvals).ravel()
+    if ev.shape[0] != d:
+        raise ValueError(f"eigvals length {ev.shape[0]} != curve length {d}; "
+                         "eigvals must match the eigvecs used for the projection.")
+    ev = np.clip(ev, 0.0, None)
+    evr_cum = np.cumsum(ev) / ev.sum()
+
+    if not np.isclose(cum[-1], 1.0, atol=1e-6):
+        raise ValueError(f"cum mass row {row} ends at {cum[-1]:.6f}, expected 1.0 "
+                         "(is this the normalized 'cum mass', not 'squared mass'?)")
+
+    setA, setB = {}, {}
+    for t in thresholds:
+        rA = _crossing(evr_cum, t)
+        setA[t] = None if rA is None else {"rank": rA, "cum_mass": float(cum[rA])}
+        rB = _crossing(cum, t)
+        setB[t] = None if rB is None else {"rank": rB, "cum_mass": float(cum[rB])}
+
+    # ---- table / csv ----
+    table = pd.DataFrame({
+        "rank": rank,
+        "cum_mass": cum,
+        "cumulative_explained_variance_ratio": evr_cum,
+    })
+    rnd = None
+    if show_random and "random" in curves:
+        rnd = _to_np(curves["random"]).mean(axis=0)   # avg over n_random
+        table["cum_mass_random"] = rnd
+    if csv_path is not None:
+        table.to_csv(csv_path, index=False)
+
+    # ---- plot ----
+    fig, ax = plt.subplots(figsize=(8, 5))
+    ax.plot(rank, cum, color="0.15", lw=1.8, label=r"$w_f$ cum mass")
+    if rnd is not None:
+        ax.plot(rank, rnd, color="0.6", lw=1.2, ls="--", label="random unit vec")
+
+    # Set A: variance crossings (square, blue) marked ON the mass curve
+    for t in thresholds:
+        m = setA[t]
+        if m is None:
+            continue
+        r, y = m["rank"], m["cum_mass"]
+        ax.axvline(r, color="C0", ls=":", lw=0.8, alpha=0.6)
+        ax.scatter([r], [y], marker="s", s=55, color="C0", zorder=5,
+                   label="var threshold" if t == thresholds[0] else None)
+        ax.annotate(f"var {int(t*100)}%\nrank {r}, mass {y:.2f}",
+                    (r, y), textcoords="offset points", xytext=(6, -22),
+                    fontsize=8, color="C0")
+
+    # Set B: mass crossings (circle, red)
+    for t in thresholds:
+        m = setB[t]
+        if m is None:
+            continue
+        r, y = m["rank"], m["cum_mass"]
+        ax.axhline(t, color="C3", ls=":", lw=0.8, alpha=0.5)
+        ax.scatter([r], [y], marker="o", s=55, facecolor="none",
+                   edgecolor="C3", linewidths=1.8, zorder=6,
+                   label="mass threshold" if t == thresholds[0] else None)
+        ax.annotate(f"mass {int(t*100)}%\nrank {r}",
+                    (r, y), textcoords="offset points", xytext=(6, 8),
+                    fontsize=8, color="C3")
+
+    ax.set_xlabel("rank  (0 = highest shift variance)")
+    ax.set_ylabel(r"cumulative captured mass  $/\,\|w_f\|^2$")
+    ax.set_ylim(0, 1.02)
+    ax.set_title(title)
+    ax.legend(loc="lower right", fontsize=9)
+    fig.tight_layout()
+    if plot_path is not None:
+        fig.savefig(plot_path, dpi=300, bbox_inches="tight")
+    plt.close(fig)
+
+    return {"table": table, "variance_crossings": setA, "mass_crossings": setB}

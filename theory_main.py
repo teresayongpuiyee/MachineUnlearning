@@ -377,6 +377,10 @@ def main(args) -> None:
             theory.explained_variance(pc_forget_shift, f"{output_path}forget_shift", csv_path=f"retrain{i}_evr.csv", plot_path=f"retrain{i}_evr.png")
             theory.mean_shift_alignment(pc_forget_shift, f"{output_path}forget_shift", csv_path=f"retrain{i}_align.csv")
 
+            w_f = ori_model.fc.weight[args.unlearn_class].detach().cpu()
+            pc_forget_curves = theory.concentration_curves([w_f], pc_forget_shift["centered"]["eigvecs"], n_random=1, seed=0)
+            theory.plot_concentration_mass(pc_forget_curves, pc_forget_shift["centered"]["eigvals"], csv_path=f"{output_path}forget_shift/retrain{i}_concentration.csv", plot_path=f"{output_path}forget_shift/retrain{i}_concentration.png")
+
     metrics_dict = {}
 
     logger.info("Saving computed metrics...")
