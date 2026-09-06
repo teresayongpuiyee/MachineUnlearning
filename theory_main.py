@@ -4,6 +4,7 @@ from model import models
 from torch.utils.data import DataLoader
 import yaml
 import torch
+import torch.nn.functional as F
 
 parser = argparse.ArgumentParser()
 # Device
@@ -367,9 +368,12 @@ def main(args) -> None:
     if "forget_shift" in args.exps:
 
         sample_dhs = []
+        mean_dhs = []
         for i in range(10):
             sample_shift_retrain = reps_dict[f"retrain{i}"] - reps_dict["original"]
+            mean_shift_retrain = reps_dict[f"retrain{i}"].mean(0) - reps_dict["original"].mean(0)
             sample_dhs.append(sample_shift_retrain)
+            mean_dhs.append(mean_shift_retrain)
 
         for i, sample_shift in enumerate(sample_dhs):
             pc_forget_shift = theory.concentration_basis(sample_shift)
@@ -380,6 +384,12 @@ def main(args) -> None:
             w_f = ori_model.fc.weight[args.unlearn_class].detach().cpu()
             pc_forget_curves = theory.concentration_curves([w_f], pc_forget_shift["centered"]["eigvecs"], n_random=1, seed=0)
             theory.plot_concentration_mass(pc_forget_curves, pc_forget_shift["centered"]["eigvals"], csv_path=f"{output_path}forget_shift/retrain{i}_concentration.csv", plot_path=f"{output_path}forget_shift/retrain{i}_concentration.png")
+
+            mean_pc_forget_curves = theory.concentration_curves([w_f], mean_dhs[i].unsqueeze(1), n_random=1, seed=0)
+            print(f"w_f concentration on mean shift {i}: {mean_pc_forget_curves["shift"].item()}")
+
+            wf_meanshift_cos = F.cosine_similarity(w_f.unsqueeze(0), mean_dhs[i].unsqueeze(0)).item()
+            print(f"w_f and mean shift {i} cosine: {wf_meanshift_cos}")
 
     metrics_dict = {}
 
